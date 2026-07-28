@@ -1,6 +1,9 @@
 package engine
 
-import "sort"
+import (
+	"path/filepath"
+	"sort"
+)
 
 // CategoryGroup 은 한 카테고리로 묶인 회수 가능 항목들의 요약이다.
 type CategoryGroup struct {
@@ -16,7 +19,8 @@ type CategoryGroup struct {
 // 매치하지 않으면 빈 슬라이스다.
 func Classify(report *Report, rules []Rule) []CategoryGroup {
 	groups := map[string]*CategoryGroup{}
-	classifyEntry(report.Root, rules, groups)
+	// root 는 부모가 없어 형제도 없다.
+	classifyEntry(report.Root, nil, rules, groups)
 
 	out := make([]CategoryGroup, 0, len(groups))
 	for _, g := range groups {
@@ -33,8 +37,8 @@ func Classify(report *Report, rules []Rule) []CategoryGroup {
 	return out
 }
 
-func classifyEntry(e *Entry, rules []Rule, groups map[string]*CategoryGroup) {
-	if cat, skipChildren, ok := matchRules(rules, e); ok {
+func classifyEntry(e *Entry, siblings map[string]bool, rules []Rule, groups map[string]*CategoryGroup) {
+	if cat, skipChildren, ok := matchRules(rules, e, siblings); ok {
 		g := groups[cat]
 		if g == nil {
 			g = &CategoryGroup{Category: cat}
@@ -47,7 +51,16 @@ func classifyEntry(e *Entry, rules []Rule, groups map[string]*CategoryGroup) {
 			return
 		}
 	}
+	if len(e.Children) == 0 {
+		return
+	}
+	// 자식들의 형제 집합은 이 디렉토리 안에서 한 번만 만들어 모든 자식이 공유한다. 규칙마다
+	// 다시 훑으면 큰 디렉토리에서 비용이 규칙 수만큼 곱해진다.
+	childSiblings := make(map[string]bool, len(e.Children))
 	for _, c := range e.Children {
-		classifyEntry(c, rules, groups)
+		childSiblings[filepath.Base(c.Path)] = true
+	}
+	for _, c := range e.Children {
+		classifyEntry(c, childSiblings, rules, groups)
 	}
 }

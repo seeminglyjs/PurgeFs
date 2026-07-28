@@ -106,13 +106,7 @@ func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, as
 		}
 	}
 
-	res := tr.Trash(paths)
-	if dir, err := historyDir(); err == nil {
-		if herr := recordHistory(dir, res, time.Now().UnixNano()); herr != nil {
-			fmt.Fprintf(w, "  (기록 실패: %v)\n", herr)
-		}
-	}
-	return reportTrashResult(w, res)
+	return reportTrashResult(w, purgePaths(w, tr, paths))
 }
 
 // reportTrashResult 는 처리·실패 개수를 출력한다. 실패가 있으면 첫 이유를 보여주고, 하나도
@@ -173,13 +167,7 @@ func runPurgeInteractive(w io.Writer, path string, tr trash.Trasher, rules []eng
 		fmt.Fprintln(w, "선택한 항목이 없습니다.")
 		return nil
 	}
-	res := tr.Trash(paths)
-	if dir, err := historyDir(); err == nil {
-		if herr := recordHistory(dir, res, time.Now().UnixNano()); herr != nil {
-			fmt.Fprintf(w, "  (기록 실패: %v)\n", herr)
-		}
-	}
-	return reportTrashResult(w, res)
+	return reportTrashResult(w, purgePaths(w, tr, paths))
 }
 
 // confirmed 는 in 에서 한 줄 읽어 y/yes(대소문자 무시)면 true.
@@ -192,31 +180,52 @@ func confirmed(in io.Reader) bool {
 	return ans == "y" || ans == "yes"
 }
 
-// guardRoot 는 위험한 루트를 거부한다: 파일시스템 루트(/)와 홈 디렉토리. 사용자가 실수로
-// 거대한 영역을 통째로 정리하는 것을 막는다. engine.Scan 이 root 를 EvalSymlinks 로
-// resolve 하므로, 가드도 같은 resolve 를 거쳐 실제로 순회될 경로를 검사한다(심볼릭링크로
-// 가드를 우회하는 것을 막는다).
+// systemRoots 는 정리 대상이 되어선 안 되는 시스템 디렉토리다. macOS 에서 /var, /etc 는
+// /private 아래로 가는 심볼릭링크라 비교 전에 함께 resolve 한다.
+var systemRoots = []string{
+	"/System", "/Library", "/Applications",
+	"/usr", "/bin", "/sbin", "/etc", "/var", "/opt", "/boot",
+}
+
+// guardRoot 는 위험한 루트를 거부한다: 파일시스템 루트(/), 홈 디렉토리와 그 조상, 시스템
+// 디렉토리. 사용자가 실수로 거대한 영역을 통째로 정리하는 것을 막는다. engine.Scan 이 root 를
+// EvalSymlinks 로 resolve 하므로, 가드도 같은 resolve 를 거쳐 실제로 순회될 경로를 검사한다
+// (심볼릭링크로 가드를 우회하는 것을 막는다).
 func guardRoot(path string) error {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return err
 	}
-	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = resolved
-	}
-	abs = filepath.Clean(abs)
+	abs = resolveClean(abs)
 	if abs == string(filepath.Separator) {
 		return fmt.Errorf("refusing to purge filesystem root %q", abs)
 	}
+	// 홈 자신뿐 아니라 홈의 조상도 거부한다. /Users 처럼 한 단계 위를 지정하면 홈 전체가
+	// 그대로 정리 대상에 들어오기 때문이다.
 	if home, err := os.UserHomeDir(); err == nil {
-		if resolved, err := filepath.EvalSymlinks(home); err == nil {
-			home = resolved
-		}
-		if abs == filepath.Clean(home) {
+		h := resolveClean(home)
+		if h == abs {
 			return fmt.Errorf("refusing to purge home directory %q", abs)
+		}
+		if strings.HasPrefix(h, abs+string(filepath.Separator)) {
+			return fmt.Errorf("refusing to purge %q: it contains the home directory %q", abs, h)
+		}
+	}
+	for _, s := range systemRoots {
+		if resolveClean(s) == abs {
+			return fmt.Errorf("refusing to purge system directory %q", abs)
 		}
 	}
 	return nil
+}
+
+// resolveClean 은 심볼릭링크를 풀고 경로를 정규화한다. resolve 가 실패하면(없는 경로 등)
+// 원본을 정규화만 해서 돌려준다.
+func resolveClean(p string) string {
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		p = resolved
+	}
+	return filepath.Clean(p)
 }
 
 // historyDir 은 매니페스트를 저장하는 ~/.purgefs/history 경로를 반환한다.
@@ -245,6 +254,44 @@ func recordHistory(dir string, res trash.Result, createdAt int64) error {
 	}
 	_, err := history.Save(dir, history.Manifest{CreatedAt: createdAt, Items: movedToItems(res.Moved)})
 	return err
+}
+
+// trashAndRecord 는 경로를 하나씩 처리하고, 이동이 생길 때마다 지금까지의 매핑으로 매니페스트를
+// 다시 쓴다. 전부 끝난 뒤에 한 번만 기록하면 도중에 Ctrl-C·kill·패닉이 났을 때 이미 휴지통으로
+// 옮겨진 파일의 매핑이 하나도 남지 않아 undo 가 불가능해진다. 매니페스트 파일명은 createdAt
+// 으로 고정이라 매번 같은 파일을 덮어쓴다.
+//
+// 기록에 실패해도 이미 옮긴 것은 되돌리지 않고 계속 진행하며, 첫 에러를 반환해 호출자가 알린다.
+func trashAndRecord(tr trash.Trasher, paths []string, dir string, createdAt int64) (trash.Result, error) {
+	var acc trash.Result
+	var recErr error
+	for _, p := range paths {
+		r := tr.Trash([]string{p})
+		acc.Trashed = append(acc.Trashed, r.Trashed...)
+		acc.Moved = append(acc.Moved, r.Moved...)
+		acc.Failed = append(acc.Failed, r.Failed...)
+		if len(r.Moved) == 0 {
+			continue // 완전 삭제이거나 실패 — 기록할 매핑이 없다
+		}
+		if err := recordHistory(dir, acc, createdAt); err != nil && recErr == nil {
+			recErr = err
+		}
+	}
+	return acc, recErr
+}
+
+// purgePaths 는 경로들을 정리하고 undo 매니페스트를 남긴다. 홈을 못 찾아 기록 디렉토리를
+// 정할 수 없으면 기록 없이 정리만 한다(현재 동작 유지).
+func purgePaths(w io.Writer, tr trash.Trasher, paths []string) trash.Result {
+	dir, err := historyDir()
+	if err != nil {
+		return tr.Trash(paths)
+	}
+	res, herr := trashAndRecord(tr, paths, dir, time.Now().UnixNano())
+	if herr != nil {
+		fmt.Fprintf(w, "  (기록 실패: %v)\n", herr)
+	}
+	return res
 }
 
 func init() {
