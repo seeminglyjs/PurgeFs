@@ -82,10 +82,12 @@ func TestRunScanShowsCategorySummary(t *testing.T) {
 	if !strings.Contains(out, "Reclaimable") {
 		t.Errorf("output missing reclaimable summary:\n%s", out)
 	}
-	if !strings.Contains(out, "node_modules") {
-		t.Errorf("output missing node_modules category:\n%s", out)
-	}
 	if !strings.Contains(out, "os-junk") {
 		t.Errorf("output missing os-junk category:\n%s", out)
+	}
+	// 요약 블록에만 나오는 항목 수 표기(예: "(1 item)")로 카테고리 라인을 판별한다.
+	// node_modules 는 위 자식 리스트에도 찍혀 단순 Contains 로는 요약을 검증 못 함.
+	if !strings.Contains(out, "item") {
+		t.Errorf("output missing per-category item count in summary:\n%s", out)
 	}
 }

@@ -4,10 +4,11 @@ import "testing"
 
 // 트리:
 // /p
-//   node_modules (dir, size 1000; 안에 lib 와 .DS_Store 있지만 단일 단위로 셈)
-//   src (dir, size 200)
-//     __pycache__ (dir, size 200)
-//   .DS_Store (file, size 6)
+//
+//	node_modules (dir, size 1000; 안에 lib 와 .DS_Store 있지만 단일 단위로 셈)
+//	src (dir, size 200)
+//	  __pycache__ (dir, size 200)
+//	.DS_Store (file, size 6)
 func sampleTree() *Report {
 	root := &Entry{Path: "/p", IsDir: true, Size: 1206, Children: []*Entry{
 		{Path: "/p/node_modules", IsDir: true, Size: 1000, Children: []*Entry{

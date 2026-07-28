@@ -22,8 +22,13 @@ func Classify(report *Report, rules []Rule) []CategoryGroup {
 	for _, g := range groups {
 		out = append(out, *g)
 	}
+	// Size 내림차순. 같은 크기면 카테고리 이름 오름차순으로 tie-break 해서 순서를 결정적으로 만든다
+	// (map 순회가 무작위라 tie-break 없으면 실행마다 순서가 달라질 수 있음).
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].Size > out[j].Size
+		if out[i].Size != out[j].Size {
+			return out[i].Size > out[j].Size
+		}
+		return out[i].Category < out[j].Category
 	})
 	return out
 }
