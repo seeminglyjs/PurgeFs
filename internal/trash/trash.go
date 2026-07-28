@@ -5,6 +5,7 @@ package trash
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 )
 
@@ -18,6 +19,7 @@ type Failure struct {
 type Moved struct {
 	Original string
 	Dest     string
+	Sidecar  string // XDG 휴지통의 .trashinfo 경로. 복원 시 함께 지운다. macOS 는 비어 있음.
 }
 
 // Result 는 한 번의 정리 작업 결과다. 경로별 실패는 Failed 에 모이고 나머지는 계속 처리된다.
@@ -30,6 +32,15 @@ type Result struct {
 // Trasher 는 경로들을 정리하는 방식을 추상화한다. 구현: macOS 휴지통 이동 또는 완전 삭제.
 type Trasher interface {
 	Trash(paths []string) Result
+}
+
+// NewTrasher 는 실행 중인 OS 에 맞는 휴지통 구현을 만든다. macOS 는 ~/.Trash, 그 외(리눅스)는
+// freedesktop.org 규격의 XDG 휴지통을 쓴다.
+func NewTrasher() (Trasher, error) {
+	if runtime.GOOS == "darwin" {
+		return NewMacTrasher()
+	}
+	return NewXDGTrasher()
 }
 
 // macTrasher 는 지정한 휴지통 디렉토리(~/.Trash)로 이동한다.

@@ -38,7 +38,7 @@ flowchart TD
         C --> F{"삭제 대상 확인"}
         F -- "취소" --> X["중단"]
         F -- "확인 / --yes" --> G{"--hard ?"}
-        G -- "아니오(기본)" --> H["휴지통 이동<br/>~/.Trash"]
+        G -- "아니오(기본)" --> H["휴지통 이동<br/>macOS ~/.Trash · Linux XDG"]
         G -- "예" --> I["완전 삭제"]
         H --> J["매니페스트 기록"]
         J --> K["purgefs undo 로 복원"]
@@ -102,7 +102,7 @@ Reclaimable: 1.2 GB across 2 categories
 
 ### `purge` — 정리(삭제)
 
-감지된 junk를 삭제한다. 기본은 macOS 휴지통(복구 가능)으로 옮기며, 삭제 전 확인한다.
+감지된 junk를 삭제한다. 기본은 휴지통(복구 가능)으로 옮기며, 삭제 전 확인한다. macOS는 `~/.Trash`, Linux는 freedesktop.org 규격의 `$XDG_DATA_HOME/Trash`(기본 `~/.local/share/Trash`)를 쓴다 — `files/`로 옮기고 짝이 되는 `info/*.trashinfo`를 남겨 파일 관리자가 휴지통 항목으로 인식한다.
 
 | 플래그 | 설명 |
 |--------|------|
@@ -187,7 +187,8 @@ purgefs/
    │  ├─ classify.go       Classify: 카테고리 그룹핑
    │  └─ model.go          Entry · Report · CategoryGroup
    ├─ trash/                삭제·휴지통
-   │  └─ trash.go          Trasher: 휴지통 이동 / 완전 삭제 (+ 원본→목적지 매핑)
+   │  ├─ trash.go          Trasher: 휴지통 이동 / 완전 삭제 (+ 원본→목적지 매핑)
+   │  └─ xdg.go            Linux XDG 휴지통 (files/ + info/*.trashinfo)
    ├─ history/              undo 매니페스트
    │  └─ history.go        Save · LoadLatest · Restore
    └─ tui/                  대화형 선택 (bubbletea)

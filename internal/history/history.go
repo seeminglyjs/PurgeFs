@@ -13,6 +13,9 @@ import (
 type Item struct {
 	Original string `json:"original"`
 	Dest     string `json:"dest"`
+	// Sidecar 는 XDG 휴지통의 .trashinfo 경로다. 복원하면서 함께 지워야 짝 없는 info 가 남지
+	// 않는다. macOS 휴지통과 예전 매니페스트는 비어 있다.
+	Sidecar string `json:"sidecar,omitempty"`
 }
 
 // Manifest 는 한 번의 휴지통 purge 기록이다.
@@ -129,6 +132,11 @@ func Restore(m Manifest) RestoreResult {
 		if err := os.Rename(it.Dest, it.Original); err != nil {
 			r.Failed = append(r.Failed, Failure{Item: it, Err: err})
 			continue
+		}
+		// 파일이 휴지통을 떠났으므로 짝이던 .trashinfo 는 잔재다. 지우지 못해도 복원 자체는
+		// 성공했으므로 실패로 세지 않는다.
+		if it.Sidecar != "" {
+			os.Remove(it.Sidecar)
 		}
 		r.Restored = append(r.Restored, it.Original)
 	}
