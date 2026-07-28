@@ -8,7 +8,7 @@ macOS·Linux용 빠른 터미널 디스크 클리너. 경로를 스캔해 용량
 
 ```mermaid
 flowchart LR
-    P1["P1 · 스캔 엔진"]:::done --> P2["P2 · 룰 분류"]:::done --> P3["P3 · 휴지통·purge"]:::done --> P4["P4 · TUI"]:::current --> P5["P5 · undo·프리셋"]:::todo
+    P1["P1 · 스캔 엔진"]:::done --> P2["P2 · 룰 분류"]:::done --> P3["P3 · 휴지통·purge"]:::done --> P4["P4 · TUI"]:::done --> P5["P5 · undo·프리셋"]:::current
 
     classDef done fill:#2ea043,color:#ffffff,stroke:#238636,stroke-width:1px
     classDef current fill:#d29922,color:#ffffff,stroke:#9e6a03,stroke-width:1px
@@ -20,8 +20,8 @@ flowchart LR
 | P1 | 스캔 엔진 (트리 순회·용량 집계·`scan`) | ✅ 완료 |
 | P2 | 룰 시스템 (junk 분류·회수량 미리보기) | ✅ 완료 |
 | P3 | 휴지통 + `purge` (삭제, 확인 후) | ✅ 완료 |
-| P4 | TUI (대화형 선택) | 🚧 예정 |
-| P5 | `undo` 복원 + 개발자 프리셋 | ⬜ 예정 |
+| P4 | TUI (대화형 선택) | ✅ 완료 |
+| P5 | `undo` 복원 + 개발자 프리셋 | 🚧 예정 |
 
 ## 서비스 플로우
 
@@ -73,6 +73,7 @@ go run . scan ~/Downloads
 ```bash
 purgefs scan [PATH]                    # PATH(기본 .) 아래 junk 보고, 삭제 안 함
 purgefs purge [PATH] [--yes] [--hard]  # junk 삭제. 기본 휴지통, --yes 확인 생략, --hard 완전 삭제
+purgefs purge [PATH] -i                # 대화형 TUI로 항목 골라 정리
 ```
 
 `scan` 출력 예:
@@ -104,6 +105,8 @@ internal/engine/
   model.go             Entry / Report / CategoryGroup
 internal/trash/
   trash.go             Trasher: 휴지통 이동 / 완전 삭제
+internal/tui/
+  model.go             bubbletea 선택 모델 (체크박스·용량 막대)
 ```
 
 ## 안전 원칙
