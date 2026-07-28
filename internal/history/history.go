@@ -34,12 +34,22 @@ type RestoreResult struct {
 	Failed   []Failure
 }
 
+// consumedExt 는 소비된(이미 되돌린) 매니페스트에 붙는 접미사다. LoadLatest 는 .json 만
+// 읽으므로 이름만 바꿔도 목록에서 빠지고, 기록 자체는 디스크에 남는다.
+const consumedExt = ".done"
+
+// manifestPath 는 매니페스트의 파일 경로다. 이름이 CreatedAt 으로 정해지므로 Save 와 Consume
+// 이 같은 파일을 가리킨다.
+func manifestPath(dir string, m Manifest) string {
+	return filepath.Join(dir, strconv.FormatInt(m.CreatedAt, 10)+".json")
+}
+
 // Save 는 매니페스트를 dir/<CreatedAt>.json 으로 쓰고 그 경로를 반환한다.
 func Save(dir string, m Manifest) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, strconv.FormatInt(m.CreatedAt, 10)+".json")
+	path := manifestPath(dir, m)
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return "", err
@@ -52,6 +62,9 @@ func Save(dir string, m Manifest) (string, error) {
 
 // LoadLatest 는 dir 안의 매니페스트 중 CreatedAt 이 가장 큰 것을 반환한다. 디렉토리가 없거나
 // 매니페스트가 하나도 없으면 ok=false 를 돌려준다(에러 아님).
+//
+// 읽거나 파싱하지 못한 파일은 건너뛴다. 매니페스트 하나가 손상됐다고(디스크가 찬 상태의 부분
+// 쓰기 등) 멀쩡한 나머지까지 못 읽어 undo 가 통째로 막히는 것을 막기 위해서다.
 func LoadLatest(dir string) (Manifest, bool, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -68,11 +81,11 @@ func LoadLatest(dir string) (Manifest, bool, error) {
 		}
 		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
-			return Manifest{}, false, err
+			continue
 		}
 		var m Manifest
 		if err := json.Unmarshal(data, &m); err != nil {
-			return Manifest{}, false, err
+			continue
 		}
 		if !found || m.CreatedAt > latest.CreatedAt {
 			latest = m
@@ -80,6 +93,14 @@ func LoadLatest(dir string) (Manifest, bool, error) {
 		}
 	}
 	return latest, found, nil
+}
+
+// Consume 은 되돌리기를 마친 매니페스트를 목록에서 제외한다. 이걸 하지 않으면 방금 복원한
+// 매니페스트가 계속 "최신"으로 남아, 다음 undo 가 이미 되돌린 것을 또 집고 그 이전 purge 에는
+// 영영 도달하지 못한다.
+func Consume(dir string, m Manifest) error {
+	path := manifestPath(dir, m)
+	return os.Rename(path, path+consumedExt)
 }
 
 // Restore 는 매니페스트의 각 항목을 휴지통(Dest)에서 원본(Original)으로 되돌린다. 원본 자리에

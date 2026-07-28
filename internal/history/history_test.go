@@ -37,6 +37,66 @@ func TestLoadLatestMissingDir(t *testing.T) {
 	}
 }
 
+// 매니페스트 하나가 깨져 있어도(부분 쓰기 등) 나머지 정상 매니페스트로 undo 가 되어야 한다.
+func TestLoadLatestSkipsCorruptManifest(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Save(dir, Manifest{CreatedAt: 100, Items: []Item{{Original: "/a", Dest: "/t/a"}}}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	// 더 최신 타임스탬프의 손상된 파일 — 이것 때문에 undo 전체가 막히면 안 된다.
+	if err := os.WriteFile(filepath.Join(dir, "999.json"), []byte("{truncated"), 0o644); err != nil {
+		t.Fatalf("seed corrupt: %v", err)
+	}
+	m, ok, err := LoadLatest(dir)
+	if err != nil {
+		t.Fatalf("corrupt manifest must not break undo: %v", err)
+	}
+	if !ok || m.CreatedAt != 100 || len(m.Items) != 1 {
+		t.Errorf("LoadLatest = (%+v, %v), want the valid manifest CreatedAt 100", m, ok)
+	}
+}
+
+// 복원을 마친 매니페스트는 소비되어, 다음 LoadLatest 가 그 이전 기록을 돌려줘야 한다.
+func TestConsumeMakesPreviousManifestLatest(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Save(dir, Manifest{CreatedAt: 100, Items: []Item{{Original: "/a", Dest: "/t/a"}}}); err != nil {
+		t.Fatalf("save 1: %v", err)
+	}
+	newest := Manifest{CreatedAt: 200, Items: []Item{{Original: "/b", Dest: "/t/b"}}}
+	if _, err := Save(dir, newest); err != nil {
+		t.Fatalf("save 2: %v", err)
+	}
+	if err := Consume(dir, newest); err != nil {
+		t.Fatalf("Consume: %v", err)
+	}
+	m, ok, err := LoadLatest(dir)
+	if err != nil || !ok {
+		t.Fatalf("LoadLatest = (%+v, %v, %v)", m, ok, err)
+	}
+	if m.CreatedAt != 100 {
+		t.Errorf("latest after Consume = %d, want the earlier manifest 100", m.CreatedAt)
+	}
+}
+
+// 소비한 매니페스트도 파일 자체는 남겨 기록을 보존한다(확장자만 바뀐다).
+func TestConsumeKeepsFileOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	m := Manifest{CreatedAt: 100, Items: []Item{{Original: "/a", Dest: "/t/a"}}}
+	if _, err := Save(dir, m); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := Consume(dir, m); err != nil {
+		t.Fatalf("Consume: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("ReadDir = (%v, %v), want 1 retained file", entries, err)
+	}
+	if filepath.Ext(entries[0].Name()) == ".json" {
+		t.Errorf("consumed manifest %q still loads as active history", entries[0].Name())
+	}
+}
+
 func TestRestoreMovesBackAndSkips(t *testing.T) {
 	base := t.TempDir()
 	// 휴지통에 있는 파일(Dest 존재), 원본 자리는 비어 있음 → 복원되어야 함
