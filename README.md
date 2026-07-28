@@ -1,56 +1,115 @@
 # PurgeFs
 
-Fast terminal disk cleaner for macOS and Linux. Scan a path, see what's wasting space, purge the junk — no GUI, no paywall.
+macOS·Linux용 빠른 터미널 디스크 클리너. 경로를 스캔해 용량을 잡아먹는 junk를 찾고, 안전하게 정리한다. GUI 없음, 유료 없음.
 
-Inspired by [tw93/mole](https://github.com/tw93/mole), trimmed down to a focused CLI.
+[tw93/mole](https://github.com/tw93/mole)에서 영감을 받아 집중된 CLI로 다듬었다. 삭제는 기본적으로 **휴지통행**(복구 가능)이며, 완전 삭제는 `--hard`로만.
 
-## Status
+## 진행 상황
 
-Early scaffold. `scan` / `purge` commands are stubbed — not implemented yet.
+```mermaid
+flowchart LR
+    P1["P1 · 스캔 엔진"]:::done --> P2["P2 · 룰 분류"]:::done --> P3["P3 · 휴지통·purge"]:::current --> P4["P4 · TUI"]:::todo --> P5["P5 · undo·프리셋"]:::todo
 
-## Build
+    classDef done fill:#2ea043,color:#ffffff,stroke:#238636,stroke-width:1px
+    classDef current fill:#d29922,color:#ffffff,stroke:#9e6a03,stroke-width:1px
+    classDef todo fill:#30363d,color:#8b949e,stroke:#484f58,stroke-width:1px
+```
 
-Requires Go (1.24+).
+| 단계 | 내용 | 상태 |
+|------|------|------|
+| P1 | 스캔 엔진 (트리 순회·용량 집계·`scan`) | ✅ 완료 |
+| P2 | 룰 시스템 (junk 분류·회수량 미리보기) | ✅ 완료 |
+| P3 | 휴지통 + `purge` (삭제, 확인 후) | 🚧 계획 |
+| P4 | TUI (대화형 선택) | ⬜ 예정 |
+| P5 | `undo` 복원 + 개발자 프리셋 | ⬜ 예정 |
+
+## 서비스 플로우
+
+```mermaid
+flowchart TD
+    subgraph SCAN["scan (읽기 전용)"]
+        A["purgefs scan PATH"] --> B["engine.Scan<br/>트리 순회 + 용량 집계"]
+        B --> C["engine.Classify<br/>junk 카테고리 분류"]
+        C --> D["회수 가능 요약 출력"]
+    end
+
+    subgraph PURGE["purge (삭제, P3)"]
+        E["purgefs purge PATH"] --> B
+        C --> F{"삭제 대상 확인"}
+        F -- "취소" --> X["중단"]
+        F -- "확인 / --yes" --> G{"--hard ?"}
+        G -- "아니오(기본)" --> H["휴지통 이동<br/>~/.Trash"]
+        G -- "예" --> I["완전 삭제"]
+        H --> J["매니페스트 기록"]
+        J --> K["purgefs undo 로 복원 (P5)"]
+    end
+
+    classDef done fill:#0d3b2e,color:#3fb950,stroke:#238636
+    classDef todo fill:#3a2d0a,color:#d29922,stroke:#9e6a03
+    class A,B,C,D done
+    class E,F,G,H,I,J,K,X todo
+```
+
+## 빌드
+
+Go(1.24+) 필요.
 
 ```bash
-# install Go if missing
+# Go 없으면 설치
 brew install go
 
 go build -o purgefs .
 ./purgefs --help
 ```
 
-Or run without building:
+빌드 없이 실행:
 
 ```bash
 go run . scan ~/Downloads
 ```
 
-## Usage
+## 사용법
 
 ```bash
-purgefs scan [PATH]            # report junk under PATH (default: .), no deletion
-purgefs purge [PATH] [--yes]   # delete junk under PATH, asks first unless --yes
+purgefs scan [PATH]            # PATH(기본 .) 아래 junk 보고, 삭제 안 함
+purgefs purge [PATH] [--yes]   # junk 삭제(기본 휴지통), --yes 면 확인 생략
 ```
 
-## Layout
+`scan` 출력 예:
 
 ```
-main.go        entry point
-cmd/           cobra command tree
-  root.go      root command + version + Execute()
-  scan.go      scan subcommand
-  purge.go     purge subcommand
+Scanned /path/to/project
+Total: 1.4 GB across 812 files, 143 dirs
+  1.2 GB  /path/to/project/node_modules
+  ...
+
+Reclaimable: 1.2 GB across 2 categories
+     1.2 GB  node_modules    (1 item)
+       3 KB  os-junk         (2 items)
 ```
 
-## Roadmap
+## 구조
 
-- [ ] Filesystem walk with size aggregation (`filepath.WalkDir`)
-- [ ] Junk rules (build caches, node_modules, __pycache__, .DS_Store, logs, temp)
-- [ ] Interactive TUI selection
-- [ ] Dry-run + confirmation before delete
-- [ ] Config file for custom rules / ignore paths
+```
+main.go                진입점
+cmd/                   cobra 커맨드 (root, scan, purge)
+  scan.go              scan: 스캔 + 요약 출력
+  format.go            humanBytes / plural
+internal/engine/
+  walk.go              Walker: 순회 + 용량 집계
+  scan.go              Scan: Report 생성
+  rule.go              Rule 인터페이스 + 내장 규칙
+  classify.go          Classify: 카테고리 그룹핑
+  model.go             Entry / Report / CategoryGroup
+```
 
-## License
+## 안전 원칙
 
-MIT — see [LICENSE](LICENSE).
+- 스캔 루트 **밖**은 절대 삭제하지 않는다.
+- 심볼릭링크는 따라가지 않는다(링크 자체만, 대상 삭제 금지).
+- 기본은 휴지통행(복구 가능). 완전 삭제는 `--hard`로만, 별도 확인.
+- `scan`은 본질적으로 미리보기(dry-run). `purge`는 삭제 전 확인.
+
+## 라이선스
+
+MIT — [LICENSE](LICENSE) 참고.
