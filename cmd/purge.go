@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/seeminglyjs/PurgeFs/internal/engine"
+	"github.com/seeminglyjs/PurgeFs/internal/history"
 	"github.com/seeminglyjs/PurgeFs/internal/trash"
 	"github.com/seeminglyjs/PurgeFs/internal/tui"
 	"github.com/spf13/cobra"
@@ -19,6 +21,7 @@ var (
 	purgeYes         bool
 	purgeHard        bool
 	purgeInteractive bool
+	purgePreset      string
 )
 
 var purgeCmd = &cobra.Command{
@@ -44,22 +47,35 @@ var purgeCmd = &cobra.Command{
 			}
 			tr = t
 		}
-		if purgeInteractive {
-			return runPurgeInteractive(cmd.OutOrStdout(), path, tr)
+		rules := engine.DefaultRules()
+		if purgePreset != "" {
+			r, ok := engine.Preset(purgePreset)
+			if !ok {
+				return fmt.Errorf("unknown preset %q (available: dev-caches)", purgePreset)
+			}
+			rules = r
 		}
-		return runPurge(cmd.OutOrStdout(), cmd.InOrStdin(), path, tr, purgeHard, purgeYes)
+		if purgeInteractive {
+			return runPurgeInteractive(cmd.OutOrStdout(), path, tr, rules)
+		}
+		return runPurge(cmd.OutOrStdout(), cmd.InOrStdin(), path, tr, purgeHard, purgeYes, rules)
 	},
 }
 
 // runPurge 는 path 를 스캔·분류해 삭제 대상을 요약하고, assumeYes 가 아니면 in 에서 확인을
 // 받은 뒤 tr 로 처리한다. hard 는 확인 문구를 완전 삭제용으로 바꾸는 데만 쓴다. junk 가
 // 없으면 아무것도 삭제하지 않는다.
-func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, assumeYes bool) error {
+func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, assumeYes bool, rules []engine.Rule) error {
+	// 상대 경로면 절대 경로로 바꾼다. 그래야 매니페스트에 기록되는 원본 경로가 절대 경로가
+	// 되어 undo 를 다른 디렉토리에서 실행해도 올바른 위치로 복원된다.
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
 	report, _, err := engine.Scan(path)
 	if err != nil {
 		return err
 	}
-	groups := engine.Classify(report, engine.DefaultRules())
+	groups := engine.Classify(report, rules)
 	if len(groups) == 0 {
 		fmt.Fprintln(w, "정리할 junk가 없습니다.")
 		return nil
@@ -91,6 +107,11 @@ func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, as
 	}
 
 	res := tr.Trash(paths)
+	if dir, err := historyDir(); err == nil {
+		if herr := recordHistory(dir, res, time.Now().UnixNano()); herr != nil {
+			fmt.Fprintf(w, "  (기록 실패: %v)\n", herr)
+		}
+	}
 	return reportTrashResult(w, res)
 }
 
@@ -122,12 +143,17 @@ func groupsToItems(groups []engine.CategoryGroup) []tui.Item {
 
 // runPurgeInteractive 는 분류 결과를 TUI 로 띄워 사용자가 고른 항목만 tr 로 처리한다. tty 가
 // 필요한 tea.Program 실행이라 단위 테스트하지 않는다(선택 로직은 internal/tui 에서 테스트).
-func runPurgeInteractive(w io.Writer, path string, tr trash.Trasher) error {
+func runPurgeInteractive(w io.Writer, path string, tr trash.Trasher, rules []engine.Rule) error {
+	// 상대 경로면 절대 경로로 바꾼다. 그래야 매니페스트에 기록되는 원본 경로가 절대 경로가
+	// 되어 undo 를 다른 디렉토리에서 실행해도 올바른 위치로 복원된다.
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
 	report, _, err := engine.Scan(path)
 	if err != nil {
 		return err
 	}
-	groups := engine.Classify(report, engine.DefaultRules())
+	groups := engine.Classify(report, rules)
 	if len(groups) == 0 {
 		fmt.Fprintln(w, "정리할 junk가 없습니다.")
 		return nil
@@ -147,7 +173,13 @@ func runPurgeInteractive(w io.Writer, path string, tr trash.Trasher) error {
 		fmt.Fprintln(w, "선택한 항목이 없습니다.")
 		return nil
 	}
-	return reportTrashResult(w, tr.Trash(paths))
+	res := tr.Trash(paths)
+	if dir, err := historyDir(); err == nil {
+		if herr := recordHistory(dir, res, time.Now().UnixNano()); herr != nil {
+			fmt.Fprintf(w, "  (기록 실패: %v)\n", herr)
+		}
+	}
+	return reportTrashResult(w, res)
 }
 
 // confirmed 는 in 에서 한 줄 읽어 y/yes(대소문자 무시)면 true.
@@ -187,9 +219,38 @@ func guardRoot(path string) error {
 	return nil
 }
 
+// historyDir 은 매니페스트를 저장하는 ~/.purgefs/history 경로를 반환한다.
+func historyDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".purgefs", "history"), nil
+}
+
+// movedToItems 는 휴지통 이동 매핑을 매니페스트 항목으로 바꾼다.
+func movedToItems(moved []trash.Moved) []history.Item {
+	items := make([]history.Item, 0, len(moved))
+	for _, mv := range moved {
+		items = append(items, history.Item{Original: mv.Original, Dest: mv.Dest})
+	}
+	return items
+}
+
+// recordHistory 는 휴지통 이동이 있으면 매니페스트를 저장한다. 완전 삭제(Moved 비어 있음)는
+// 되돌릴 수 없으므로 아무것도 남기지 않는다.
+func recordHistory(dir string, res trash.Result, createdAt int64) error {
+	if len(res.Moved) == 0 {
+		return nil
+	}
+	_, err := history.Save(dir, history.Manifest{CreatedAt: createdAt, Items: movedToItems(res.Moved)})
+	return err
+}
+
 func init() {
 	purgeCmd.Flags().BoolVar(&purgeYes, "yes", false, "확인 없이 진행")
 	purgeCmd.Flags().BoolVar(&purgeHard, "hard", false, "휴지통이 아니라 완전 삭제")
 	purgeCmd.Flags().BoolVarP(&purgeInteractive, "interactive", "i", false, "대화형 TUI로 선택해 정리")
+	purgeCmd.Flags().StringVar(&purgePreset, "preset", "", "규칙 프리셋(예: dev-caches)")
 	rootCmd.AddCommand(purgeCmd)
 }

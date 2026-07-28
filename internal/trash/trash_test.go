@@ -35,6 +35,15 @@ func TestMacTrasherMovesToTrash(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(trashDir, "junk.txt")); err != nil {
 		t.Errorf("not moved into trash: %v", err)
 	}
+	if len(res.Moved) != 1 {
+		t.Fatalf("Moved = %+v, want 1 entry", res.Moved)
+	}
+	if res.Moved[0].Original != src {
+		t.Errorf("Moved[0].Original = %q, want %q", res.Moved[0].Original, src)
+	}
+	if res.Moved[0].Dest != filepath.Join(trashDir, "junk.txt") {
+		t.Errorf("Moved[0].Dest = %q, want %q", res.Moved[0].Dest, filepath.Join(trashDir, "junk.txt"))
+	}
 }
 
 func TestMacTrasherRenamesOnCollision(t *testing.T) {
@@ -57,6 +66,9 @@ func TestMacTrasherRenamesOnCollision(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(trashDir, "dup 2")); err != nil {
 		t.Errorf("collision not renamed to \"dup 2\": %v", err)
+	}
+	if len(res.Moved) != 1 || res.Moved[0].Dest != filepath.Join(trashDir, "dup 2") {
+		t.Errorf("Moved = %+v, want dest .../dup 2", res.Moved)
 	}
 }
 
@@ -89,5 +101,20 @@ func TestHardDeleterRemoves(t *testing.T) {
 	}
 	if _, err := os.Lstat(dir); !os.IsNotExist(err) {
 		t.Errorf("dir still exists: %v", err)
+	}
+}
+
+func TestHardDeleterHasNoMoved(t *testing.T) {
+	base := t.TempDir()
+	f := filepath.Join(base, "cache")
+	if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	res := NewHardDeleter().Trash([]string{f})
+	if len(res.Moved) != 0 {
+		t.Errorf("hardDeleter must not record Moved, got %+v", res.Moved)
+	}
+	if len(res.Trashed) != 1 {
+		t.Errorf("Trashed = %d, want 1", len(res.Trashed))
 	}
 }

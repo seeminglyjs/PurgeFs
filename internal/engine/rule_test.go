@@ -55,3 +55,23 @@ func TestDefaultRulesMatchExpected(t *testing.T) {
 		t.Error("a normal source dir must not match any default rule")
 	}
 }
+
+func TestPresetDevCaches(t *testing.T) {
+	rules, ok := Preset("dev-caches")
+	if !ok {
+		t.Fatal("dev-caches preset must exist")
+	}
+	if cat, _, ok := matchRules(rules, &Entry{Path: "/p/node_modules", IsDir: true}); !ok || cat != "node_modules" {
+		t.Errorf("dev-caches should match node_modules, got (%q, %v)", cat, ok)
+	}
+	// dev-caches 는 OS junk(.DS_Store)를 포함하지 않는다.
+	if _, _, ok := matchRules(rules, &Entry{Path: "/p/.DS_Store", IsDir: false}); ok {
+		t.Error("dev-caches must not match .DS_Store")
+	}
+}
+
+func TestPresetUnknown(t *testing.T) {
+	if _, ok := Preset("nope"); ok {
+		t.Error("unknown preset must return ok=false")
+	}
+}

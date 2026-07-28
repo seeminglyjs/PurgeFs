@@ -44,7 +44,7 @@ func TestRunPurgeConfirmedTrashes(t *testing.T) {
 	f := &fakeTrasher{}
 	var buf bytes.Buffer
 
-	err := runPurge(&buf, strings.NewReader("y\n"), root, f, false, false)
+	err := runPurge(&buf, strings.NewReader("y\n"), root, f, false, false, engine.DefaultRules())
 	if err != nil {
 		t.Fatalf("runPurge: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestRunPurgeCancelledDoesNothing(t *testing.T) {
 	f := &fakeTrasher{}
 	var buf bytes.Buffer
 
-	err := runPurge(&buf, strings.NewReader("n\n"), root, f, false, false)
+	err := runPurge(&buf, strings.NewReader("n\n"), root, f, false, false, engine.DefaultRules())
 	if err != nil {
 		t.Fatalf("runPurge: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestRunPurgeAssumeYesSkipsPrompt(t *testing.T) {
 	var buf bytes.Buffer
 
 	// 입력이 비어도 --yes 면 진행해야 한다.
-	err := runPurge(&buf, strings.NewReader(""), root, f, false, true)
+	err := runPurge(&buf, strings.NewReader(""), root, f, false, true, engine.DefaultRules())
 	if err != nil {
 		t.Fatalf("runPurge: %v", err)
 	}
@@ -96,12 +96,30 @@ func TestRunPurgeNoJunk(t *testing.T) {
 	f := &fakeTrasher{}
 	var buf bytes.Buffer
 
-	err := runPurge(&buf, strings.NewReader(""), root, f, false, true)
+	err := runPurge(&buf, strings.NewReader(""), root, f, false, true, engine.DefaultRules())
 	if err != nil {
 		t.Fatalf("runPurge: %v", err)
 	}
 	if len(f.got) != 0 {
 		t.Errorf("clean dir should trash nothing: %v", f.got)
+	}
+}
+
+func TestRunPurgeAbsolutizesRelativeRoot(t *testing.T) {
+	root := junkDir(t)
+	t.Chdir(root)
+	f := &fakeTrasher{}
+	var buf bytes.Buffer
+	if err := runPurge(&buf, strings.NewReader("y\n"), ".", f, false, false, engine.DefaultRules()); err != nil {
+		t.Fatalf("runPurge: %v", err)
+	}
+	if len(f.got) == 0 {
+		t.Fatal("nothing was sent to the trasher")
+	}
+	for _, p := range f.got {
+		if !filepath.IsAbs(p) {
+			t.Errorf("trasher got non-absolute path %q; undo would restore to the wrong cwd", p)
+		}
 	}
 }
 
@@ -151,7 +169,7 @@ func (failTrasher) Trash(paths []string) trash.Result {
 func TestRunPurgeAllFailedReturnsError(t *testing.T) {
 	root := junkDir(t)
 	var buf bytes.Buffer
-	err := runPurge(&buf, strings.NewReader(""), root, failTrasher{}, false, true)
+	err := runPurge(&buf, strings.NewReader(""), root, failTrasher{}, false, true, engine.DefaultRules())
 	if err == nil {
 		t.Error("expected a non-nil error when every target fails")
 	}
@@ -174,5 +192,21 @@ func TestGroupsToItems(t *testing.T) {
 	}
 	if items[1].Label != "os-junk" || len(items[1].Paths) != 2 {
 		t.Errorf("item[1] = %+v", items[1])
+	}
+}
+
+func TestRunPurgeWithPresetSkipsOsJunk(t *testing.T) {
+	root := junkDir(t) // node_modules + .DS_Store
+	f := &fakeTrasher{}
+	var buf bytes.Buffer
+
+	rules, _ := engine.Preset("dev-caches")
+	if err := runPurge(&buf, strings.NewReader("y\n"), root, f, false, false, rules); err != nil {
+		t.Fatalf("runPurge: %v", err)
+	}
+	for _, p := range f.got {
+		if strings.HasSuffix(p, ".DS_Store") {
+			t.Errorf("dev-caches preset must not purge .DS_Store, got %q", p)
+		}
 	}
 }
