@@ -70,7 +70,7 @@ go run . scan ~/Downloads
 
 | 명령 | 하는 일 |
 |------|---------|
-| `purgefs scan [PATH]` | PATH 아래 junk를 찾아 용량·카테고리 요약 출력 (삭제 안 함) |
+| `purgefs scan [PATH] [--preset]` | PATH 아래 junk를 찾아 용량·카테고리 요약 출력 (삭제 안 함) |
 | `purgefs purge [PATH]` | 감지된 junk 삭제 (기본 휴지통, 확인 후) |
 | `purgefs undo` | 가장 최근 휴지통 purge를 되돌린다 |
 | `purgefs completion <shell>` | 셸 자동완성 스크립트 생성 (bash·zsh·fish·powershell) |
@@ -83,9 +83,12 @@ go run . scan ~/Downloads
 PATH(기본: 현재 디렉토리)를 순회해 용량 큰 항목과 회수 가능한 junk 카테고리를 보여준다. **아무것도 삭제하지 않는다.**
 
 ```bash
-purgefs scan              # 현재 디렉토리
-purgefs scan ~/Downloads  # 특정 경로
+purgefs scan                            # 현재 디렉토리
+purgefs scan ~/Downloads                # 특정 경로
+purgefs scan ~/project --preset dev-caches  # purge와 같은 규칙으로 미리보기
 ```
+
+`--preset`은 `purge`와 같은 값을 받는다. 지우기 전에 실제 대상을 그대로 확인할 수 있다.
 
 출력 예:
 

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/seeminglyjs/PurgeFs/internal/engine"
+
 	"os"
 )
 
@@ -16,7 +18,7 @@ func TestRunScanReportsTotal(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := runScan(&buf, root); err != nil {
+	if err := runScan(&buf, root, engine.DefaultRules()); err != nil {
 		t.Fatalf("runScan: %v", err)
 	}
 	out := buf.String()
@@ -50,7 +52,7 @@ func TestRunScanFollowsSymlinkedRoot(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := runScan(&buf, linkPath); err != nil {
+	if err := runScan(&buf, linkPath, engine.DefaultRules()); err != nil {
 		t.Fatalf("runScan: %v", err)
 	}
 	out := buf.String()
@@ -75,7 +77,7 @@ func TestRunScanShowsCategorySummary(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := runScan(&buf, root); err != nil {
+	if err := runScan(&buf, root, engine.DefaultRules()); err != nil {
 		t.Fatalf("runScan: %v", err)
 	}
 	out := buf.String()

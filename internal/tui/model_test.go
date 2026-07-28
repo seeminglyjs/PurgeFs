@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -112,5 +114,86 @@ func TestDeselectAllYieldsEmpty(t *testing.T) {
 	}
 	if m.SelectedSize() != 0 {
 		t.Errorf("SelectedSize = %d, want 0", m.SelectedSize())
+	}
+}
+
+func TestInitHasNoCommand(t *testing.T) {
+	if cmd := New(sampleItems(), idFmt).Init(); cmd != nil {
+		t.Errorf("Init = %v, want nil", cmd)
+	}
+}
+
+// 커서는 목록 밖으로 나가지 않는다.
+func TestCursorStopsAtBounds(t *testing.T) {
+	m := New(sampleItems(), idFmt)
+	up, _ := m.Update(key(tea.KeyUp)) // 이미 맨 위
+	if up.(Model).cursor != 0 {
+		t.Errorf("cursor = %d after up at the top, want 0", up.(Model).cursor)
+	}
+	down, _ := m.Update(key(tea.KeyDown))
+	down, _ = down.(Model).Update(key(tea.KeyDown)) // 이미 맨 아래
+	if got := down.(Model).cursor; got != 1 {
+		t.Errorf("cursor = %d after down at the bottom, want 1", got)
+	}
+}
+
+// 키가 아닌 메시지는 상태를 바꾸지 않는다.
+func TestNonKeyMessageIsIgnored(t *testing.T) {
+	m := New(sampleItems(), idFmt)
+	updated, cmd := m.Update(tea.WindowSizeMsg{Width: 10, Height: 10})
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil", cmd)
+	}
+	if updated.(Model).SelectedSize() != m.SelectedSize() {
+		t.Error("a non-key message must not change the selection")
+	}
+}
+
+func TestViewShowsItemsChecksAndCursor(t *testing.T) {
+	m := New(sampleItems(), func(n int64) string { return fmt.Sprintf("%dB", n) })
+	out := m.View()
+
+	for _, want := range []string{"node_modules", "os-junk", "1000B", "6B"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("View missing %q:\n%s", want, out)
+		}
+	}
+	if !strings.Contains(out, "> [x] node_modules") {
+		t.Errorf("View must mark the cursor row and the checked box:\n%s", out)
+	}
+	// 해제하면 체크가 빠진다.
+	updated, _ := m.Update(key(tea.KeySpace))
+	if out := updated.(Model).View(); !strings.Contains(out, "> [ ] node_modules") {
+		t.Errorf("View must show an empty box after deselecting:\n%s", out)
+	}
+}
+
+// 확정·취소 후에는 화면을 비워 터미널에 잔상이 남지 않게 한다.
+func TestViewEmptyAfterQuit(t *testing.T) {
+	for _, k := range []tea.KeyMsg{key(tea.KeyEnter), rune_('q')} {
+		updated, _ := New(sampleItems(), idFmt).Update(k)
+		if out := updated.(Model).View(); out != "" {
+			t.Errorf("View after %v = %q, want empty", k, out)
+		}
+	}
+}
+
+func TestSizeBar(t *testing.T) {
+	cases := []struct {
+		size, max int64
+		want      string
+	}{
+		{10, 10, "██████████"},
+		{5, 10, "█████░░░░░"},
+		{0, 10, "░░░░░░░░░░"},
+		{20, 10, "██████████"}, // width 를 넘지 않는다
+	}
+	for _, c := range cases {
+		if got := sizeBar(c.size, c.max, 10); got != c.want {
+			t.Errorf("sizeBar(%d, %d, 10) = %q, want %q", c.size, c.max, got, c.want)
+		}
+	}
+	if got := sizeBar(5, 0, 10); got != "" {
+		t.Errorf("sizeBar with max 0 = %q, want empty", got)
 	}
 }
