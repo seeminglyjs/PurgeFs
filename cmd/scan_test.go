@@ -28,12 +28,12 @@ func TestRunScanReportsTotal(t *testing.T) {
 	}
 }
 
-// TestRunScanFollowsSymlinkedRoot ensures runScan resolves a symlinked root
-// before handing it to engine.Scan. engine.Walk deliberately does not follow
-// symlinks (including a symlinked root), so on macOS, where common roots such
-// as /tmp and the t.TempDir() base are themselves symlinks, scanning the raw
-// path would see the root as a symlink leaf with no children. runScan must
-// resolve the root with filepath.EvalSymlinks first.
+// TestRunScanFollowsSymlinkedRoot ensures a symlinked root is resolved before
+// walking. engine.Walk deliberately does not follow symlinks (including a
+// symlinked root), so on macOS, where common roots such as /tmp and the
+// t.TempDir() base are themselves symlinks, scanning the raw path would see the
+// root as a symlink leaf with no children. engine.Scan resolves the named root
+// with filepath.EvalSymlinks first, and runScan relies on that.
 func TestRunScanFollowsSymlinkedRoot(t *testing.T) {
 	base := t.TempDir()
 
