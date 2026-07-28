@@ -1,4 +1,4 @@
-// Package cmd wires up the purgefs command-line interface.
+// Package cmd 는 purgefs 명령줄 인터페이스를 구성한다.
 package cmd
 
 import (
@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is the current build version, overridable at build time via -ldflags.
+// version 은 현재 빌드 버전. 빌드 시 -ldflags 로 덮어쓸 수 있다.
 var version = "0.1.0"
 
 var rootCmd = &cobra.Command{
@@ -18,7 +18,7 @@ var rootCmd = &cobra.Command{
 	Version: version,
 }
 
-// Execute runs the root command and exits non-zero on error.
+// Execute 는 root 커맨드를 실행하고, 에러 시 0 이 아닌 코드로 종료한다.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

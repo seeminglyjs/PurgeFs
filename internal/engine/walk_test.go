@@ -8,9 +8,9 @@ import (
 
 func TestWalkAggregatesSizes(t *testing.T) {
 	root := t.TempDir()
-	mustWrite(t, filepath.Join(root, "a.txt"), "abc") // 3 bytes
+	mustWrite(t, filepath.Join(root, "a.txt"), "abc") // 3 바이트
 	mustMkdir(t, filepath.Join(root, "sub"))
-	mustWrite(t, filepath.Join(root, "sub", "b.txt"), "hello") // 5 bytes
+	mustWrite(t, filepath.Join(root, "sub", "b.txt"), "hello") // 5 바이트
 
 	e, werrs, err := Walk(root)
 	if err != nil {
@@ -38,7 +38,7 @@ func TestWalkSkipsSymlinks(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "real")
 	mustMkdir(t, target)
-	mustWrite(t, filepath.Join(target, "big.txt"), "0123456789") // 10 bytes
+	mustWrite(t, filepath.Join(target, "big.txt"), "0123456789") // 10 바이트
 	link := filepath.Join(root, "link")
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatalf("symlink: %v", err)

@@ -8,9 +8,9 @@ import (
 
 func TestScanCounts(t *testing.T) {
 	root := t.TempDir()
-	mustWrite(t, filepath.Join(root, "a.txt"), "abc")          // file
-	mustMkdir(t, filepath.Join(root, "sub"))                   // dir
-	mustWrite(t, filepath.Join(root, "sub", "b.txt"), "hello") // file
+	mustWrite(t, filepath.Join(root, "a.txt"), "abc")          // 파일
+	mustMkdir(t, filepath.Join(root, "sub"))                   // 디렉토리
+	mustWrite(t, filepath.Join(root, "sub", "b.txt"), "hello") // 파일
 
 	r, werrs, err := Scan(root)
 	if err != nil {
@@ -25,7 +25,7 @@ func TestScanCounts(t *testing.T) {
 	if r.FileCount != 2 {
 		t.Errorf("FileCount = %d, want 2", r.FileCount)
 	}
-	if r.DirCount != 2 { // root + sub
+	if r.DirCount != 2 { // root + sub 둘
 		t.Errorf("DirCount = %d, want 2", r.DirCount)
 	}
 }
@@ -34,7 +34,7 @@ func TestScanResolvesSymlinkedRoot(t *testing.T) {
 	base := t.TempDir()
 	real := filepath.Join(base, "real")
 	mustMkdir(t, real)
-	mustWrite(t, filepath.Join(real, "f.txt"), "0123456789") // 10 bytes
+	mustWrite(t, filepath.Join(real, "f.txt"), "0123456789") // 10 바이트
 	link := filepath.Join(base, "link")
 	if err := os.Symlink(real, link); err != nil {
 		t.Fatalf("symlink: %v", err)

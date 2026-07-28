@@ -66,6 +66,7 @@ Fast terminal disk cleaner for macOS/Linux. CLI (no GUI). Scan a path, purge jun
 - Keep it dependency-light. Justify each new module.
 - Purge rules target build/cache junk: `target/`, `node_modules/`, `__pycache__/`, `.DS_Store`, logs, temp — never user data by default.
 - New subcommand = new file under `cmd/`, register via `init()` + `rootCmd.AddCommand`.
+- **Code comments MUST be written in Korean** (한국어 주석). Applies to all `.go` source and test files — doc comments, inline comments, everything. Keep identifiers, API names, and error strings as-is.
 
 ## Git
 
