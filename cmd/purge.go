@@ -47,13 +47,9 @@ var purgeCmd = &cobra.Command{
 			}
 			tr = t
 		}
-		rules := engine.DefaultRules()
-		if purgePreset != "" {
-			r, ok := engine.Preset(purgePreset)
-			if !ok {
-				return fmt.Errorf("unknown preset %q (available: dev-caches)", purgePreset)
-			}
-			rules = r
+		rules, err := resolveRules(purgePreset)
+		if err != nil {
+			return err
 		}
 		if purgeInteractive {
 			return runPurgeInteractive(cmd.OutOrStdout(), path, tr, rules)

@@ -11,6 +11,8 @@ import (
 
 // scanCmd 은 읽기 전용 `scan` 서브커맨드다: 용량만 보고하고 절대 삭제하지 않는다.
 // path 인자는 선택이며 기본값은 현재 디렉토리다.
+var scanPreset string
+
 var scanCmd = &cobra.Command{
 	Use:   "scan [path]",
 	Short: "Scan a path and report junk files/directories (no deletion)",
@@ -20,14 +22,18 @@ var scanCmd = &cobra.Command{
 		if len(args) == 1 {
 			path = args[0]
 		}
-		return runScan(cmd.OutOrStdout(), path)
+		rules, err := resolveRules(scanPreset)
+		if err != nil {
+			return err
+		}
+		return runScan(cmd.OutOrStdout(), path, rules)
 	},
 }
 
 // runScan 은 path 를 스캔하고 용량 요약을 w 에 쓴다. (stdout 을 직접 쓰지 않고) io.Writer 를
 // 받아 테스트가 출력을 캡처할 수 있게 한다. 순회는 엔진이 하고, 이 함수는 순수하게 출력만
 // 담당한다.
-func runScan(w io.Writer, path string) error {
+func runScan(w io.Writer, path string, rules []engine.Rule) error {
 	report, werrs, err := engine.Scan(path)
 	if err != nil {
 		return err
@@ -52,7 +58,7 @@ func runScan(w io.Writer, path string) error {
 	}
 
 	// junk 카테고리로 분류해 회수 가능 용량을 요약한다. 매치가 없으면 아무 것도 안 찍는다.
-	groups := engine.Classify(report, engine.DefaultRules())
+	groups := engine.Classify(report, rules)
 	if len(groups) > 0 {
 		var reclaim int64
 		for _, g := range groups {
@@ -74,5 +80,6 @@ func runScan(w io.Writer, path string) error {
 }
 
 func init() {
+	scanCmd.Flags().StringVar(&scanPreset, "preset", "", "규칙 프리셋(예: dev-caches)")
 	rootCmd.AddCommand(scanCmd)
 }
