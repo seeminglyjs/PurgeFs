@@ -87,8 +87,8 @@ func TestRestoreDoesNotOverwriteExistingOriginal(t *testing.T) {
 	if data, _ := os.ReadFile(original); string(data) != "current" {
 		t.Errorf("original overwritten: %q, want \"current\"", data)
 	}
-	if _, err := os.Lstat(dest); err != nil {
-		t.Errorf("dest should be untouched: %v", err)
+	if data, _ := os.ReadFile(dest); string(data) != "old" {
+		t.Errorf("dest content changed: %q, want \"old\"", data)
 	}
 }
 
