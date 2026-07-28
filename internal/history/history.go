@@ -84,6 +84,10 @@ func LoadLatest(dir string) (Manifest, bool, error) {
 
 // Restore 는 매니페스트의 각 항목을 휴지통(Dest)에서 원본(Original)으로 되돌린다. 원본 자리에
 // 이미 뭔가 있거나 Dest 가 없으면 덮어쓰지 않고 건너뛴다.
+//
+// 존재 확인과 os.Rename 사이에는 원자성이 없다(표준 라이브러리에 이식 가능한 "없을 때만
+// rename" 이 없음). 그 좁은 틈에 다른 프로세스가 Original 을 새로 만들면 rename 이 그것을
+// 덮어쓸 수 있다. undo 는 단일 사용자의 로컬 복원 동작이라 이 위험은 감수한다.
 func Restore(m Manifest) RestoreResult {
 	var r RestoreResult
 	for _, it := range m.Items {

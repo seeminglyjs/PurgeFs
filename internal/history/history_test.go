@@ -68,3 +68,21 @@ func TestRestoreMovesBackAndSkips(t *testing.T) {
 		t.Errorf("original not restored: %v", err)
 	}
 }
+
+// 원본은 비어 있지만 Dest(휴지통 파일)가 없으면 건너뛴다(두 번째 skip 분기 단독 검증).
+func TestRestoreSkipsWhenDestMissing(t *testing.T) {
+	base := t.TempDir()
+	m := Manifest{Items: []Item{
+		{Original: filepath.Join(base, "gone"), Dest: filepath.Join(base, "no-such-dest")},
+	}}
+	res := Restore(m)
+	if len(res.Restored) != 0 {
+		t.Errorf("Restored = %v, want none", res.Restored)
+	}
+	if len(res.Skipped) != 1 {
+		t.Errorf("Skipped = %v, want 1", res.Skipped)
+	}
+	if len(res.Failed) != 0 {
+		t.Errorf("Failed = %v, want none", res.Failed)
+	}
+}
