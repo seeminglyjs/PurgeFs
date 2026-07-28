@@ -34,7 +34,7 @@
 
 ---
 
-### 태스크 1: Rule 인터페이스 + 내장 규칙
+### Task 1: Rule 인터페이스 + 내장 규칙
 
 **파일:**
 - 생성: `internal/engine/rule.go`
@@ -199,7 +199,7 @@ git commit -m "feat: add engine Rule interface and built-in junk rules"
 
 ---
 
-### 태스크 2: 트리를 카테고리 그룹으로 분류
+### Task 2: 트리를 카테고리 그룹으로 분류
 
 **파일:**
 - 생성: `internal/engine/classify.go`
@@ -358,7 +358,7 @@ git commit -m "feat: add engine Classify grouping matched entries by category"
 
 ---
 
-### 태스크 3: scan 출력에 카테고리 요약
+### Task 3: scan 출력에 카테고리 요약
 
 **파일:**
 - 수정: `cmd/scan.go`
