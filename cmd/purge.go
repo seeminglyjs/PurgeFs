@@ -8,14 +8,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/seeminglyjs/PurgeFs/internal/engine"
 	"github.com/seeminglyjs/PurgeFs/internal/trash"
+	"github.com/seeminglyjs/PurgeFs/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 var (
-	purgeYes  bool
-	purgeHard bool
+	purgeYes         bool
+	purgeHard        bool
+	purgeInteractive bool
 )
 
 var purgeCmd = &cobra.Command{
@@ -40,6 +43,9 @@ var purgeCmd = &cobra.Command{
 				return err
 			}
 			tr = t
+		}
+		if purgeInteractive {
+			return runPurgeInteractive(cmd.OutOrStdout(), path, tr)
 		}
 		return runPurge(cmd.OutOrStdout(), cmd.InOrStdin(), path, tr, purgeHard, purgeYes)
 	},
@@ -85,19 +91,63 @@ func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, as
 	}
 
 	res := tr.Trash(paths)
+	return reportTrashResult(w, res)
+}
+
+// reportTrashResult 는 처리·실패 개수를 출력한다. 실패가 있으면 첫 이유를 보여주고, 하나도
+// 처리 못 했으면 스크립트가 감지하도록 에러를 반환한다.
+func reportTrashResult(w io.Writer, res trash.Result) error {
 	fmt.Fprintf(w, "처리 %d개", len(res.Trashed))
 	if len(res.Failed) > 0 {
 		fmt.Fprintf(w, ", 실패 %d개", len(res.Failed))
 	}
 	fmt.Fprintln(w)
 	if len(res.Failed) > 0 {
-		// 첫 실패 이유를 보여주고, 하나도 처리 못 했으면 에러로 종료해 스크립트가 감지하게 한다.
 		fmt.Fprintf(w, "  첫 실패: %s: %v\n", res.Failed[0].Path, res.Failed[0].Err)
 		if len(res.Trashed) == 0 {
 			return fmt.Errorf("purge failed: %d개 항목 모두 실패", len(res.Failed))
 		}
 	}
 	return nil
+}
+
+// groupsToItems 는 분류 결과를 TUI 항목으로 바꾼다.
+func groupsToItems(groups []engine.CategoryGroup) []tui.Item {
+	items := make([]tui.Item, 0, len(groups))
+	for _, g := range groups {
+		items = append(items, tui.Item{Label: g.Category, Size: g.Size, Paths: g.Paths})
+	}
+	return items
+}
+
+// runPurgeInteractive 는 분류 결과를 TUI 로 띄워 사용자가 고른 항목만 tr 로 처리한다. tty 가
+// 필요한 tea.Program 실행이라 단위 테스트하지 않는다(선택 로직은 internal/tui 에서 테스트).
+func runPurgeInteractive(w io.Writer, path string, tr trash.Trasher) error {
+	report, _, err := engine.Scan(path)
+	if err != nil {
+		return err
+	}
+	groups := engine.Classify(report, engine.DefaultRules())
+	if len(groups) == 0 {
+		fmt.Fprintln(w, "정리할 junk가 없습니다.")
+		return nil
+	}
+
+	final, err := tea.NewProgram(tui.New(groupsToItems(groups), humanBytes)).Run()
+	if err != nil {
+		return err
+	}
+	m, ok := final.(tui.Model)
+	if !ok || !m.Confirmed() {
+		fmt.Fprintln(w, "취소했습니다.")
+		return nil
+	}
+	paths := m.SelectedPaths()
+	if len(paths) == 0 {
+		fmt.Fprintln(w, "선택한 항목이 없습니다.")
+		return nil
+	}
+	return reportTrashResult(w, tr.Trash(paths))
 }
 
 // confirmed 는 in 에서 한 줄 읽어 y/yes(대소문자 무시)면 true.
@@ -140,5 +190,6 @@ func guardRoot(path string) error {
 func init() {
 	purgeCmd.Flags().BoolVar(&purgeYes, "yes", false, "확인 없이 진행")
 	purgeCmd.Flags().BoolVar(&purgeHard, "hard", false, "휴지통이 아니라 완전 삭제")
+	purgeCmd.Flags().BoolVarP(&purgeInteractive, "interactive", "i", false, "대화형 TUI로 선택해 정리")
 	rootCmd.AddCommand(purgeCmd)
 }
