@@ -29,12 +29,12 @@ flowchart LR
 flowchart TD
     subgraph SCAN["scan (읽기 전용)"]
         A["purgefs scan PATH"] --> B["engine.Scan<br/>순회 + 용량 집계 + junk 분류<br/>(한 번에, 트리 미보유)"]
-        B --> D["회수 가능 요약 출력"]
+        B -- "scan" --> D["회수 가능 요약 출력"]
     end
 
     subgraph PURGE["purge (삭제)"]
         E["purgefs purge PATH"] --> B
-        C --> F{"삭제 대상 확인"}
+        B -- "purge" --> F{"삭제 대상 확인"}
         F -- "취소" --> X["중단"]
         F -- "확인 / --yes" --> G{"--hard ?"}
         G -- "아니오(기본)" --> H["휴지통 이동<br/>macOS ~/.Trash · Linux XDG"]
@@ -44,7 +44,7 @@ flowchart TD
     end
 
     classDef done fill:#0d3b2e,color:#3fb950,stroke:#238636
-    class A,B,C,D,E,F,G,H,I,J,K,X done
+    class A,B,D,E,F,G,H,I,J,K,X done
 ```
 
 ## 빌드
@@ -70,7 +70,7 @@ go run . scan ~/Downloads
 | 명령 | 하는 일 |
 |------|---------|
 | `purgefs scan [PATH] [--preset]` | PATH 아래 junk를 찾아 용량·카테고리 요약 출력 (삭제 안 함) |
-| `purgefs purge [PATH]` | 감지된 junk 삭제 (기본 휴지통, 확인 후) |
+| `purgefs purge [PATH] [플래그]` | 감지된 junk 삭제 (기본 휴지통, 확인 후) |
 | `purgefs undo` | 가장 최근 휴지통 purge를 되돌린다 |
 | `purgefs completion <shell>` | 셸 자동완성 스크립트 생성 (bash·zsh·fish·powershell) |
 | `purgefs help [명령]` | 명령 도움말 |
@@ -94,12 +94,13 @@ purgefs scan ~/project --preset dev-caches  # purge와 같은 규칙으로 미�
 ```text
 Scanned /path/to/project
 Total: 1.4 GB across 812 files, 143 dirs
-  1.2 GB  /path/to/project/node_modules
-  ...
+      1.2 GB  /path/to/project/node_modules
+    140.0 MB  /path/to/project/dist
+      2.0 MB  /path/to/project/src
 
-Reclaimable: 1.2 GB across 2 categories
-     1.2 GB  node_modules    (1 item)
-       3 KB  os-junk         (2 items)
+Reclaimable: 1.3 GB across 2 categories
+      1.2 GB  node_modules   (1 item)
+    140.0 MB  build-cache    (1 item)
 ```
 
 ### `purge` — 정리(삭제)
@@ -123,7 +124,19 @@ purgefs purge ~/project --preset dev-caches # node_modules·빌드 캐시만 (.D
 
 위험 루트는 거부한다: `/`, 홈 디렉토리와 그 조상(`/Users` 등), 시스템 디렉토리(`/usr`, `/etc`, `/var` 등). 이들을 가리키는 심볼릭링크도 막는다.
 
-`build/`·`dist/`·`target/`은 이름만으로 빌드 산출물인지 알 수 없으므로, 같은 위치에 프로젝트 마커가 있을 때만 대상이 된다 — `target/`은 `Cargo.toml`·`pom.xml`, `dist/`는 `package.json`, `build/`는 `build.gradle`·`pom.xml`·`CMakeLists.txt`. `node_modules/`·`__pycache__/`·`.gradle/`·`.DS_Store`는 이름만으로 명확해 마커가 필요 없다.
+`build/`·`dist/`·`target/`은 이름만으로 빌드 산출물인지 알 수 없으므로, 같은 위치에 프로젝트 마커가 있을 때만 대상이 된다 — `target/`은 `Cargo.toml`·`pom.xml`, `dist/`는 `package.json`, `build/`는 `build.gradle`·`build.gradle.kts`·`pom.xml`·`CMakeLists.txt`. `node_modules/`·`__pycache__/`·`.gradle/`·`.DS_Store`는 이름만으로 명확해 마커가 필요 없다.
+
+`-i` 대화형 화면:
+
+```text
+정리할 항목 선택 (↑/↓ 이동, space 토글, enter 실행, q 취소)
+
+> [x] node_modules       1.2 GB ████████████████████
+  [x] build-cache      340.0 MB █████░░░░░░░░░░░░░░░
+  [x] os-junk            3.0 KB ░░░░░░░░░░░░░░░░░░░░
+
+선택 합계: 1.5 GB
+```
 
 ### `undo` — 되돌리기
 
@@ -136,18 +149,6 @@ purgefs undo   # 마지막 휴지통 정리를 복원
 원래 자리에 이미 뭔가 있으면 덮어쓰지 않고 건너뛴다. `--hard`(완전 삭제)는 기록이 없어 되돌릴 수 없다.
 
 되돌린 매니페스트는 소비되므로, `undo`를 다시 실행하면 그 이전 purge로 넘어간다. 복원에 실패한 항목이 있으면 매니페스트를 남겨 원인을 고친 뒤 다시 시도할 수 있다.
-
-`-i` 대화형 화면:
-
-```text
-정리할 항목 선택 (↑/↓ 이동, space 토글, enter 실행, q 취소)
-
-> [x] node_modules      1.2 GB ████████████████████
-  [x] build-cache      340 MB █████░░░░░░░░░░░░░░░░░
-  [x] os-junk            3 KB ░░░░░░░░░░░░░░░░░░░░░░
-
-선택 합계: 1.5 GB
-```
 
 ## 구조
 
@@ -180,6 +181,7 @@ purgefs/
 │  ├─ scan.go              scan: 스캔 + 요약 출력
 │  ├─ purge.go             purge: 분류 · 확인 · 삭제 (runPurge · guardRoot · -i · --preset)
 │  ├─ undo.go              undo: 최근 매니페스트 복원
+│  ├─ rules.go             resolveRules: --preset 해석 (scan·purge 공용)
 │  └─ format.go            humanBytes · plural
 └─ internal/
    ├─ engine/               스캔·분류 (표준 라이브러리만)
@@ -189,10 +191,10 @@ purgefs/
    │  ├─ classify.go       CategoryGroup + 크기순 정렬
    │  └─ model.go          Entry · Child · Report
    ├─ trash/                삭제·휴지통
-   │  ├─ trash.go          Trasher: 휴지통 이동 / 완전 삭제 (+ 원본→목적지 매핑)
+   │  ├─ trash.go          Trasher: 플랫폼별 휴지통 / 완전 삭제 (+ 원본→목적지 매핑)
    │  └─ xdg.go            Linux XDG 휴지통 (files/ + info/*.trashinfo)
    ├─ history/              undo 매니페스트
-   │  └─ history.go        Save · LoadLatest · Restore
+   │  └─ history.go        Save · LoadLatest · Restore · Consume
    └─ tui/                  대화형 선택 (bubbletea)
       └─ model.go          선택 모델 (체크박스 · 용량 막대)
 ```
@@ -203,6 +205,7 @@ purgefs/
 - 심볼릭링크는 따라가지 않는다(링크 자체만, 대상 삭제 금지).
 - 기본은 휴지통행(복구 가능). 완전 삭제는 `--hard`로만, 별도 확인.
 - `scan`은 본질적으로 미리보기(dry-run). `purge`는 삭제 전 확인.
+- 권한 등으로 못 읽은 경로가 있으면 건너뛰고 그 개수를 알린다 — 조용히 넘어가지 않는다.
 
 ## 라이선스
 
