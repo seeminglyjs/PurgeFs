@@ -51,6 +51,21 @@ func runScan(w io.Writer, path string) error {
 		fmt.Fprintf(w, "  %10s  %s\n", humanBytes(c.Size), c.Path)
 	}
 
+	// junk 카테고리로 분류해 회수 가능 용량을 요약한다. 매치가 없으면 아무 것도 안 찍는다.
+	groups := engine.Classify(report, engine.DefaultRules())
+	if len(groups) > 0 {
+		var reclaim int64
+		for _, g := range groups {
+			reclaim += g.Size
+		}
+		fmt.Fprintf(w, "\nReclaimable: %s across %d %s\n",
+			humanBytes(reclaim), len(groups), plural(len(groups), "category", "categories"))
+		for _, g := range groups {
+			fmt.Fprintf(w, "  %10s  %-14s (%d %s)\n",
+				humanBytes(g.Size), g.Category, g.Count, plural(g.Count, "item", "items"))
+		}
+	}
+
 	// 못 읽은 경로는 치명적이 아니라 건너뛴 것 — 총량이 실제보다 적을 수 있음을 알린다.
 	if len(werrs) > 0 {
 		fmt.Fprintf(w, "\nSkipped %d path(s) due to errors\n", len(werrs))
