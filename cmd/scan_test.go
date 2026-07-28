@@ -58,3 +58,34 @@ func TestRunScanFollowsSymlinkedRoot(t *testing.T) {
 		t.Errorf("output missing resolved child size %q (symlinked root not followed?):\n%s", "4.9 KB", out)
 	}
 }
+
+func TestRunScanShowsCategorySummary(t *testing.T) {
+	root := t.TempDir()
+	// 안에 파일이 있는 node_modules
+	nm := filepath.Join(root, "node_modules")
+	if err := os.MkdirAll(nm, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(nm, "big.bin"), make([]byte, 2048), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	// 루트에 떠도는 .DS_Store
+	if err := os.WriteFile(filepath.Join(root, ".DS_Store"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := runScan(&buf, root); err != nil {
+		t.Fatalf("runScan: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "Reclaimable") {
+		t.Errorf("output missing reclaimable summary:\n%s", out)
+	}
+	if !strings.Contains(out, "node_modules") {
+		t.Errorf("output missing node_modules category:\n%s", out)
+	}
+	if !strings.Contains(out, "os-junk") {
+		t.Errorf("output missing os-junk category:\n%s", out)
+	}
+}
