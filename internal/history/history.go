@@ -120,6 +120,12 @@ func Restore(m Manifest) RestoreResult {
 			r.Skipped = append(r.Skipped, it.Original) // 휴지통에 없음
 			continue
 		}
+		// purge 이후 원본의 부모 디렉토리가 사라졌을 수 있다(부모째로 옮겼거나 사용자가 지웠거나).
+		// 없으면 rename 이 ENOENT 로 실패하므로 미리 만들어 둔다.
+		if err := os.MkdirAll(filepath.Dir(it.Original), 0o755); err != nil {
+			r.Failed = append(r.Failed, Failure{Item: it, Err: err})
+			continue
+		}
 		if err := os.Rename(it.Dest, it.Original); err != nil {
 			r.Failed = append(r.Failed, Failure{Item: it, Err: err})
 			continue
