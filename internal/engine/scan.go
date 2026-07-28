@@ -20,10 +20,14 @@ func Scan(root string) (*Report, []WalkError, error) {
 		Root:      rootEntry,
 		TotalSize: rootEntry.Size,
 	}
+	// TotalSize is already on the root (Walk aggregated it). Counts still need
+	// one pass over the tree.
 	countEntries(rootEntry, r)
 	return r, werrs, nil
 }
 
+// countEntries tallies file and directory nodes into r by walking the tree the
+// same shape Walk produced (the root itself is counted as a directory).
 func countEntries(e *Entry, r *Report) {
 	if e.IsDir {
 		r.DirCount++
