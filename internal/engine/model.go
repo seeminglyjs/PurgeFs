@@ -1,17 +1,21 @@
-// Package engine 은 파일 트리를 순회하며 용량을 집계하고, (이후 단계에서) junk 규칙을
-// 매칭한다. 프론트엔드 비의존적이다: CLI·TUI·향후 GUI 가 모두 이 패키지를 소비한다.
+// Package engine 은 파일 트리를 순회하며 용량을 집계하고 junk 규칙을 매칭한다.
+// 프론트엔드 비의존적이다: CLI·TUI·향후 GUI 가 모두 이 패키지를 소비한다.
 package engine
 
-// Entry 는 스캔한 트리의 한 노드(파일 또는 디렉토리)다. 디렉토리는 자식을 Children 에
-// 담고 Size 는 하위 트리 전체의 합이다. 파일은 Children 이 nil 이고 Size 는 자기 자신의
-// 바이트 수다. 모든 프론트엔드가 이 한 가지 모양을 렌더한다 — 용량 트리 뷰와 카테고리
-// 뷰 둘 다 같은 Entry 그래프에서 만들어진다.
+// Entry 는 규칙이 판단하는 대상 노드 하나다(파일 또는 디렉토리). 순회 중에만 존재하며 트리로
+// 쌓이지 않는다 — 규칙은 노드 하나와 그 형제 이름만 보면 되기 때문이다.
 type Entry struct {
-	Path     string
-	Size     int64    // 바이트. 파일: 자기 크기. 디렉토리: 하위 트리 합산 크기.
-	IsDir    bool     // 디렉토리면 true. 파일·심볼릭링크는 false.
-	ModTime  int64    // 마지막 수정 시각(unix 초). 이후 단계의 staleness 스코어링에 사용.
-	Children []*Entry // 디렉토리의 자식 목록. 파일·심볼릭링크는 nil(순회 안 함).
+	Path    string
+	Size    int64 // 바이트. 파일: 자기 크기. 디렉토리: 하위 트리 합산 크기.
+	IsDir   bool  // 디렉토리면 true. 파일·심볼릭링크는 false.
+	ModTime int64 // 마지막 수정 시각(unix 초).
+}
+
+// Child 는 스캔 root 바로 아래 항목의 집계다. scan 이 "무엇이 용량을 먹는지" 보여주는 데 쓴다.
+// 개수가 root 의 fan-out 만큼이라 트리 크기와 무관하다.
+type Child struct {
+	Path string
+	Size int64
 }
 
 // WalkError 는 순회 중 처리하지 못한 경로 하나를 기록한다(예: 권한 거부). 설계상
@@ -22,11 +26,13 @@ type WalkError struct {
 	Err  error  // 원인이 된 os 에러
 }
 
-// Report 는 Scan 의 최종 결과다: 트리의 root 와, 프론트엔드가 다시 순회하지 않고 바로
-// 출력할 수 있는 집계 총량.
+// Report 는 Scan 의 최종 결과다. 노드별 데이터는 남기지 않는다: 총량과 최상위 항목, 매치된
+// junk 그룹만 들고 있어 메모리가 트리 크기가 아니라 결과 크기에 비례한다.
 type Report struct {
-	Root      *Entry // 스캔한 트리의 root. Root.Size == TotalSize
-	TotalSize int64  // root 하위 전체 바이트
-	FileCount int    // 트리의 파일 노드 수
-	DirCount  int    // 트리의 디렉토리 노드 수(root 포함)
+	Root      string          // 실제로 순회한 root 경로(심볼릭링크 resolve 후)
+	TotalSize int64           // root 하위 전체 바이트
+	FileCount int             // 트리의 파일 노드 수
+	DirCount  int             // 트리의 디렉토리 노드 수(root 포함)
+	Children  []Child         // root 바로 아래 항목들(순회 순서)
+	Groups    []CategoryGroup // 매치된 junk. Size 내림차순.
 }

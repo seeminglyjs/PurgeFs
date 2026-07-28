@@ -12,7 +12,7 @@ func TestScanCounts(t *testing.T) {
 	mustMkdir(t, filepath.Join(root, "sub"))                   // 디렉토리
 	mustWrite(t, filepath.Join(root, "sub", "b.txt"), "hello") // 파일
 
-	r, werrs, err := Scan(root)
+	r, werrs, err := Scan(root, DefaultRules())
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
 	}
@@ -28,6 +28,9 @@ func TestScanCounts(t *testing.T) {
 	if r.DirCount != 2 { // root + sub 둘
 		t.Errorf("DirCount = %d, want 2", r.DirCount)
 	}
+	if want := resolved(t, root); r.Root != want {
+		t.Errorf("Root = %q, want %q", r.Root, want)
+	}
 }
 
 func TestScanResolvesSymlinkedRoot(t *testing.T) {
@@ -40,7 +43,7 @@ func TestScanResolvesSymlinkedRoot(t *testing.T) {
 		t.Fatalf("symlink: %v", err)
 	}
 
-	r, _, err := Scan(link)
+	r, _, err := Scan(link, DefaultRules())
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
 	}
@@ -49,5 +52,8 @@ func TestScanResolvesSymlinkedRoot(t *testing.T) {
 	}
 	if r.FileCount != 1 {
 		t.Errorf("FileCount = %d, want 1", r.FileCount)
+	}
+	if want := resolved(t, real); r.Root != want {
+		t.Errorf("Root = %q, want the resolved path %q", r.Root, want)
 	}
 }

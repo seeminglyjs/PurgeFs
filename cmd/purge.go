@@ -67,11 +67,11 @@ func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, as
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
-	report, werrs, err := engine.Scan(path)
+	report, werrs, err := engine.Scan(path, rules)
 	if err != nil {
 		return err
 	}
-	groups := engine.Classify(report, rules)
+	groups := report.Groups
 	if len(groups) == 0 {
 		fmt.Fprintln(w, "정리할 junk가 없습니다.")
 		reportWalkErrors(w, werrs)
@@ -150,11 +150,11 @@ func runPurgeInteractive(w io.Writer, path string, tr trash.Trasher, rules []eng
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
-	report, werrs, err := engine.Scan(path)
+	report, werrs, err := engine.Scan(path, rules)
 	if err != nil {
 		return err
 	}
-	groups := engine.Classify(report, rules)
+	groups := report.Groups
 	if len(groups) == 0 {
 		fmt.Fprintln(w, "정리할 junk가 없습니다.")
 		reportWalkErrors(w, werrs)
