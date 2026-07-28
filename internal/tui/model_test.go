@@ -82,3 +82,35 @@ func TestQuitCancels(t *testing.T) {
 		t.Error("q's command must be tea.Quit")
 	}
 }
+
+func TestEscCancels(t *testing.T) {
+	m := New(sampleItems(), idFmt)
+	updated, cmd := m.Update(key(tea.KeyEsc))
+	m = updated.(Model)
+	if m.Confirmed() {
+		t.Error("esc must not confirm")
+	}
+	if cmd == nil {
+		t.Fatal("esc must return a quit command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("esc's command must be tea.Quit")
+	}
+}
+
+// 전부 해제하면 선택 경로·합계가 비어야 한다(빈 선택 안전 경로).
+func TestDeselectAllYieldsEmpty(t *testing.T) {
+	m := New(sampleItems(), idFmt)
+	updated, _ := m.Update(key(tea.KeySpace)) // 커서 0 해제
+	m = updated.(Model)
+	updated, _ = m.Update(key(tea.KeyDown)) // 커서 1로
+	m = updated.(Model)
+	updated, _ = m.Update(key(tea.KeySpace)) // 커서 1 해제
+	m = updated.(Model)
+	if len(m.SelectedPaths()) != 0 {
+		t.Errorf("SelectedPaths = %v, want empty", m.SelectedPaths())
+	}
+	if m.SelectedSize() != 0 {
+		t.Errorf("SelectedSize = %d, want 0", m.SelectedSize())
+	}
+}
