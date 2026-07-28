@@ -8,7 +8,7 @@ macOS·Linux용 빠른 터미널 디스크 클리너. 경로를 스캔해 용량
 
 ```mermaid
 flowchart LR
-    P1["P1 · 스캔 엔진"]:::done --> P2["P2 · 룰 분류"]:::done --> P3["P3 · 휴지통·purge"]:::current --> P4["P4 · TUI"]:::todo --> P5["P5 · undo·프리셋"]:::todo
+    P1["P1 · 스캔 엔진"]:::done --> P2["P2 · 룰 분류"]:::done --> P3["P3 · 휴지통·purge"]:::done --> P4["P4 · TUI"]:::current --> P5["P5 · undo·프리셋"]:::todo
 
     classDef done fill:#2ea043,color:#ffffff,stroke:#238636,stroke-width:1px
     classDef current fill:#d29922,color:#ffffff,stroke:#9e6a03,stroke-width:1px
@@ -19,8 +19,8 @@ flowchart LR
 |------|------|------|
 | P1 | 스캔 엔진 (트리 순회·용량 집계·`scan`) | ✅ 완료 |
 | P2 | 룰 시스템 (junk 분류·회수량 미리보기) | ✅ 완료 |
-| P3 | 휴지통 + `purge` (삭제, 확인 후) | 🚧 계획 |
-| P4 | TUI (대화형 선택) | ⬜ 예정 |
+| P3 | 휴지통 + `purge` (삭제, 확인 후) | ✅ 완료 |
+| P4 | TUI (대화형 선택) | 🚧 예정 |
 | P5 | `undo` 복원 + 개발자 프리셋 | ⬜ 예정 |
 
 ## 서비스 플로우
@@ -46,8 +46,8 @@ flowchart TD
 
     classDef done fill:#0d3b2e,color:#3fb950,stroke:#238636
     classDef todo fill:#3a2d0a,color:#d29922,stroke:#9e6a03
-    class A,B,C,D done
-    class E,F,G,H,I,J,K,X todo
+    class A,B,C,D,E,F,G,H,I,X done
+    class J,K todo
 ```
 
 ## 빌드
@@ -71,8 +71,8 @@ go run . scan ~/Downloads
 ## 사용법
 
 ```bash
-purgefs scan [PATH]            # PATH(기본 .) 아래 junk 보고, 삭제 안 함
-purgefs purge [PATH] [--yes]   # junk 삭제(기본 휴지통), --yes 면 확인 생략
+purgefs scan [PATH]                    # PATH(기본 .) 아래 junk 보고, 삭제 안 함
+purgefs purge [PATH] [--yes] [--hard]  # junk 삭제. 기본 휴지통, --yes 확인 생략, --hard 완전 삭제
 ```
 
 `scan` 출력 예:
@@ -94,6 +94,7 @@ Reclaimable: 1.2 GB across 2 categories
 main.go                진입점
 cmd/                   cobra 커맨드 (root, scan, purge)
   scan.go              scan: 스캔 + 요약 출력
+  purge.go             purge: 분류 + 확인 + 삭제 (runPurge, guardRoot)
   format.go            humanBytes / plural
 internal/engine/
   walk.go              Walker: 순회 + 용량 집계
@@ -101,6 +102,8 @@ internal/engine/
   rule.go              Rule 인터페이스 + 내장 규칙
   classify.go          Classify: 카테고리 그룹핑
   model.go             Entry / Report / CategoryGroup
+internal/trash/
+  trash.go             Trasher: 휴지통 이동 / 완전 삭제
 ```
 
 ## 안전 원칙
