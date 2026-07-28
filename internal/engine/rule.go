@@ -50,6 +50,24 @@ func DefaultRules() []Rule {
 	}
 }
 
+// Preset 은 이름에 해당하는 규칙 집합을 반환한다. 없으면 ok=false. dev-caches 는 빌드·의존성
+// 캐시 디렉토리만 대상으로 하고 OS junk(.DS_Store)는 제외한다.
+func Preset(name string) ([]Rule, bool) {
+	switch name {
+	case "dev-caches":
+		return []Rule{
+			dirNameRule{name: "node_modules", category: "node_modules"},
+			dirNameRule{name: "target", category: "build-cache"},
+			dirNameRule{name: "build", category: "build-cache"},
+			dirNameRule{name: ".gradle", category: "build-cache"},
+			dirNameRule{name: "dist", category: "build-cache"},
+			dirNameRule{name: "__pycache__", category: "python-cache"},
+		}, true
+	default:
+		return nil, false
+	}
+}
+
 // matchRules 는 규칙들을 순서대로 시도해 첫 매치의 (카테고리, skipChildren, true) 를
 // 반환한다. 아무 것도 매치하지 않으면 ("", false, false).
 func matchRules(rules []Rule, e *Entry) (string, bool, bool) {

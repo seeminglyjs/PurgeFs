@@ -21,6 +21,7 @@ var (
 	purgeYes         bool
 	purgeHard        bool
 	purgeInteractive bool
+	purgePreset      string
 )
 
 var purgeCmd = &cobra.Command{
@@ -46,22 +47,30 @@ var purgeCmd = &cobra.Command{
 			}
 			tr = t
 		}
-		if purgeInteractive {
-			return runPurgeInteractive(cmd.OutOrStdout(), path, tr)
+		rules := engine.DefaultRules()
+		if purgePreset != "" {
+			r, ok := engine.Preset(purgePreset)
+			if !ok {
+				return fmt.Errorf("unknown preset %q (available: dev-caches)", purgePreset)
+			}
+			rules = r
 		}
-		return runPurge(cmd.OutOrStdout(), cmd.InOrStdin(), path, tr, purgeHard, purgeYes)
+		if purgeInteractive {
+			return runPurgeInteractive(cmd.OutOrStdout(), path, tr, rules)
+		}
+		return runPurge(cmd.OutOrStdout(), cmd.InOrStdin(), path, tr, purgeHard, purgeYes, rules)
 	},
 }
 
 // runPurge 는 path 를 스캔·분류해 삭제 대상을 요약하고, assumeYes 가 아니면 in 에서 확인을
 // 받은 뒤 tr 로 처리한다. hard 는 확인 문구를 완전 삭제용으로 바꾸는 데만 쓴다. junk 가
 // 없으면 아무것도 삭제하지 않는다.
-func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, assumeYes bool) error {
+func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, assumeYes bool, rules []engine.Rule) error {
 	report, _, err := engine.Scan(path)
 	if err != nil {
 		return err
 	}
-	groups := engine.Classify(report, engine.DefaultRules())
+	groups := engine.Classify(report, rules)
 	if len(groups) == 0 {
 		fmt.Fprintln(w, "정리할 junk가 없습니다.")
 		return nil
@@ -129,12 +138,12 @@ func groupsToItems(groups []engine.CategoryGroup) []tui.Item {
 
 // runPurgeInteractive 는 분류 결과를 TUI 로 띄워 사용자가 고른 항목만 tr 로 처리한다. tty 가
 // 필요한 tea.Program 실행이라 단위 테스트하지 않는다(선택 로직은 internal/tui 에서 테스트).
-func runPurgeInteractive(w io.Writer, path string, tr trash.Trasher) error {
+func runPurgeInteractive(w io.Writer, path string, tr trash.Trasher, rules []engine.Rule) error {
 	report, _, err := engine.Scan(path)
 	if err != nil {
 		return err
 	}
-	groups := engine.Classify(report, engine.DefaultRules())
+	groups := engine.Classify(report, rules)
 	if len(groups) == 0 {
 		fmt.Fprintln(w, "정리할 junk가 없습니다.")
 		return nil
@@ -232,5 +241,6 @@ func init() {
 	purgeCmd.Flags().BoolVar(&purgeYes, "yes", false, "확인 없이 진행")
 	purgeCmd.Flags().BoolVar(&purgeHard, "hard", false, "휴지통이 아니라 완전 삭제")
 	purgeCmd.Flags().BoolVarP(&purgeInteractive, "interactive", "i", false, "대화형 TUI로 선택해 정리")
+	purgeCmd.Flags().StringVar(&purgePreset, "preset", "", "규칙 프리셋(예: dev-caches)")
 	rootCmd.AddCommand(purgeCmd)
 }
