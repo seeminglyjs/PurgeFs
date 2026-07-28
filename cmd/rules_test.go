@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -23,8 +25,16 @@ func TestResolveRulesPreset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveRules(\"dev-caches\"): %v", err)
 	}
-	if _, _, ok := matchAny(rules, "/p/.DS_Store"); ok {
-		t.Error("dev-caches must not match .DS_Store")
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".DS_Store"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	report, _, err := engine.Scan(root, rules)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(report.Groups) != 0 {
+		t.Errorf("dev-caches must not match .DS_Store, got %+v", report.Groups)
 	}
 }
 
@@ -36,18 +46,6 @@ func TestResolveRulesUnknownNamesTheAvailableOnes(t *testing.T) {
 	if !strings.Contains(err.Error(), "dev-caches") {
 		t.Errorf("error should list the available presets, got %q", err)
 	}
-}
-
-// matchAny 는 파일 경로 하나를 분류해 매치 여부를 본다(엔진 내부 API 를 쓰지 않기 위한 우회).
-func matchAny(rules []engine.Rule, path string) (string, int64, bool) {
-	root := &engine.Entry{Path: "/p", IsDir: true, Children: []*engine.Entry{
-		{Path: path, IsDir: false, Size: 1},
-	}}
-	groups := engine.Classify(&engine.Report{Root: root}, rules)
-	if len(groups) == 0 {
-		return "", 0, false
-	}
-	return groups[0].Category, groups[0].Size, true
 }
 
 // scan 도 purge 와 같은 프리셋을 써야 한다. 다르면 미리보기와 실제 삭제 대상이 어긋난다.

@@ -28,9 +28,8 @@ flowchart LR
 ```mermaid
 flowchart TD
     subgraph SCAN["scan (읽기 전용)"]
-        A["purgefs scan PATH"] --> B["engine.Scan<br/>트리 순회 + 용량 집계"]
-        B --> C["engine.Classify<br/>junk 카테고리 분류"]
-        C --> D["회수 가능 요약 출력"]
+        A["purgefs scan PATH"] --> B["engine.Scan<br/>순회 + 용량 집계 + junk 분류<br/>(한 번에, 트리 미보유)"]
+        B --> D["회수 가능 요약 출력"]
     end
 
     subgraph PURGE["purge (삭제)"]
@@ -184,11 +183,11 @@ purgefs/
 │  └─ format.go            humanBytes · plural
 └─ internal/
    ├─ engine/               스캔·분류 (표준 라이브러리만)
-   │  ├─ walk.go           Walker: 순회 + 용량 집계
-   │  ├─ scan.go           Scan: Report 생성
+   │  ├─ walk.go           walker: 순회하며 집계·분류 (노드 미보유)
+   │  ├─ scan.go           Scan: 규칙 받아 Report 생성
    │  ├─ rule.go           Rule 인터페이스 + 내장 규칙
-   │  ├─ classify.go       Classify: 카테고리 그룹핑
-   │  └─ model.go          Entry · Report · CategoryGroup
+   │  ├─ classify.go       CategoryGroup + 크기순 정렬
+   │  └─ model.go          Entry · Child · Report
    ├─ trash/                삭제·휴지통
    │  ├─ trash.go          Trasher: 휴지통 이동 / 완전 삭제 (+ 원본→목적지 매핑)
    │  └─ xdg.go            Linux XDG 휴지통 (files/ + info/*.trashinfo)
