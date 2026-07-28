@@ -8,7 +8,7 @@ macOS·Linux용 빠른 터미널 디스크 클리너. 경로를 스캔해 용량
 
 ```mermaid
 flowchart LR
-    P1["P1 · 스캔 엔진"]:::done --> P2["P2 · 룰 분류"]:::done --> P3["P3 · 휴지통·purge"]:::done --> P4["P4 · TUI"]:::done --> P5["P5 · undo·프리셋"]:::current
+    P1["P1 · 스캔 엔진"]:::done --> P2["P2 · 룰 분류"]:::done --> P3["P3 · 휴지통·purge"]:::done --> P4["P4 · TUI"]:::done --> P5["P5 · undo·프리셋"]:::done
 
     classDef done fill:#2ea043,color:#ffffff,stroke:#238636,stroke-width:1px
     classDef current fill:#d29922,color:#ffffff,stroke:#9e6a03,stroke-width:1px
@@ -21,7 +21,7 @@ flowchart LR
 | P2 | 룰 시스템 (junk 분류·회수량 미리보기) | ✅ 완료 |
 | P3 | 휴지통 + `purge` (삭제, 확인 후) | ✅ 완료 |
 | P4 | TUI (대화형 선택) | ✅ 완료 |
-| P5 | `undo` 복원 + 개발자 프리셋 | 🚧 예정 |
+| P5 | `undo` 복원 + 개발자 프리셋 | ✅ 완료 |
 
 ## 서비스 플로우
 
@@ -33,7 +33,7 @@ flowchart TD
         C --> D["회수 가능 요약 출력"]
     end
 
-    subgraph PURGE["purge (삭제, P3)"]
+    subgraph PURGE["purge (삭제)"]
         E["purgefs purge PATH"] --> B
         C --> F{"삭제 대상 확인"}
         F -- "취소" --> X["중단"]
@@ -41,13 +41,11 @@ flowchart TD
         G -- "아니오(기본)" --> H["휴지통 이동<br/>~/.Trash"]
         G -- "예" --> I["완전 삭제"]
         H --> J["매니페스트 기록"]
-        J --> K["purgefs undo 로 복원 (P5)"]
+        J --> K["purgefs undo 로 복원"]
     end
 
     classDef done fill:#0d3b2e,color:#3fb950,stroke:#238636
-    classDef todo fill:#3a2d0a,color:#d29922,stroke:#9e6a03
-    class A,B,C,D,E,F,G,H,I,X done
-    class J,K todo
+    class A,B,C,D,E,F,G,H,I,J,K,X done
 ```
 
 ## 빌드
@@ -74,6 +72,7 @@ go run . scan ~/Downloads
 |------|---------|
 | `purgefs scan [PATH]` | PATH 아래 junk를 찾아 용량·카테고리 요약 출력 (삭제 안 함) |
 | `purgefs purge [PATH]` | 감지된 junk 삭제 (기본 휴지통, 확인 후) |
+| `purgefs undo` | 가장 최근 휴지통 purge를 되돌린다 |
 | `purgefs completion <shell>` | 셸 자동완성 스크립트 생성 (bash·zsh·fish·powershell) |
 | `purgefs help [명령]` | 명령 도움말 |
 
@@ -110,15 +109,27 @@ Reclaimable: 1.2 GB across 2 categories
 | `--yes` | 확인 프롬프트 생략 (스크립트·자동화용) |
 | `--hard` | 휴지통이 아니라 **완전 삭제** (복구 불가) |
 | `-i, --interactive` | TUI로 항목을 직접 골라 정리 |
+| `--preset <이름>` | 규칙 프리셋으로 대상 좁힘 (`dev-caches`: 빌드·의존성 캐시만) |
 
 ```bash
-purgefs purge ~/project          # 확인 후 휴지통으로
-purgefs purge ~/project --yes    # 확인 없이 휴지통으로
-purgefs purge ~/project --hard   # 완전 삭제 (복구 불가)
-purgefs purge ~/project -i       # 대화형 TUI로 선택
+purgefs purge ~/project                    # 확인 후 휴지통으로
+purgefs purge ~/project --yes              # 확인 없이 휴지통으로
+purgefs purge ~/project --hard             # 완전 삭제 (복구 불가)
+purgefs purge ~/project -i                 # 대화형 TUI로 선택
+purgefs purge ~/project --preset dev-caches # node_modules·빌드 캐시만 (.DS_Store 제외)
 ```
 
 위험 루트(`/`, 홈 디렉토리)는 거부한다. `/`나 홈을 가리키는 심볼릭링크도 막는다.
+
+### `undo` — 되돌리기
+
+가장 최근 휴지통 purge를 되돌린다. purge가 남긴 매니페스트(`~/.purgefs/history`)를 읽어 휴지통에서 원래 자리로 파일을 복원한다.
+
+```bash
+purgefs undo   # 마지막 휴지통 정리를 복원
+```
+
+원래 자리에 이미 뭔가 있으면 덮어쓰지 않고 건너뛴다. `--hard`(완전 삭제)는 기록이 없어 되돌릴 수 없다.
 
 `-i` 대화형 화면:
 
@@ -138,19 +149,21 @@ purgefs purge ~/project -i       # 대화형 TUI로 선택
 
 ```mermaid
 flowchart TD
-    CLI["cmd/ · CLI<br/>scan · purge"]
+    CLI["cmd/ · CLI<br/>scan · purge · undo"]
     TUI["internal/tui · 선택 화면<br/>(bubbletea)"]
     ENG["internal/engine · 스캔·분류<br/>(표준 라이브러리만)"]
     TR["internal/trash · 삭제·휴지통"]
+    HIST["internal/history · undo 매니페스트"]
 
     CLI --> ENG
     CLI --> TR
     CLI --> TUI
+    CLI --> HIST
 
     classDef front fill:#1f6feb,color:#fff,stroke:#388bfd
     classDef core fill:#238636,color:#fff,stroke:#2ea043
     class CLI,TUI front
-    class ENG,TR core
+    class ENG,TR,HIST core
 ```
 
 ```text
@@ -159,7 +172,8 @@ purgefs/
 ├─ cmd/                     cobra 커맨드 (프론트엔드)
 │  ├─ root.go              루트 커맨드 · 버전
 │  ├─ scan.go              scan: 스캔 + 요약 출력
-│  ├─ purge.go             purge: 분류 · 확인 · 삭제 (runPurge · guardRoot · -i)
+│  ├─ purge.go             purge: 분류 · 확인 · 삭제 (runPurge · guardRoot · -i · --preset)
+│  ├─ undo.go              undo: 최근 매니페스트 복원
 │  └─ format.go            humanBytes · plural
 └─ internal/
    ├─ engine/               스캔·분류 (표준 라이브러리만)
@@ -169,7 +183,9 @@ purgefs/
    │  ├─ classify.go       Classify: 카테고리 그룹핑
    │  └─ model.go          Entry · Report · CategoryGroup
    ├─ trash/                삭제·휴지통
-   │  └─ trash.go          Trasher: 휴지통 이동 / 완전 삭제
+   │  └─ trash.go          Trasher: 휴지통 이동 / 완전 삭제 (+ 원본→목적지 매핑)
+   ├─ history/              undo 매니페스트
+   │  └─ history.go        Save · LoadLatest · Restore
    └─ tui/                  대화형 선택 (bubbletea)
       └─ model.go          선택 모델 (체크박스 · 용량 막대)
 ```
