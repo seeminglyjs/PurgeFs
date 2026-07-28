@@ -61,6 +61,9 @@ func TestWalkSkipsSymlinks(t *testing.T) {
 }
 
 func TestWalkCollectsPermissionErrors(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("chmod 0o000 does not restrict root; test is meaningless as root")
+	}
 	root := t.TempDir()
 	locked := filepath.Join(root, "locked")
 	mustMkdir(t, locked)

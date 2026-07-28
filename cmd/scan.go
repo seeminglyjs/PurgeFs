@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"path/filepath"
 	"sort"
 
 	"github.com/seeminglyjs/PurgeFs/internal/engine"
@@ -24,28 +23,18 @@ var scanCmd = &cobra.Command{
 }
 
 // runScan scans path and writes a size summary to w.
-//
-// The root is resolved through filepath.EvalSymlinks before scanning: engine.Walk
-// deliberately does not follow symlinks (including a symlinked root), and on macOS
-// common roots are themselves symlinks (e.g. /tmp -> /private/tmp), so scanning the
-// raw path would report an empty tree. If resolution fails (e.g. path does not
-// exist), the original path is scanned so engine.Scan can surface the real error.
 func runScan(w io.Writer, path string) error {
-	scanPath := path
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		scanPath = resolved
-	}
-
-	report, werrs, err := engine.Scan(scanPath)
+	report, werrs, err := engine.Scan(path)
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(w, "Scanned %s\n", scanPath)
-	fmt.Fprintf(w, "Total: %s across %d files, %d dirs\n",
-		humanBytes(report.TotalSize), report.FileCount, report.DirCount)
+	fmt.Fprintf(w, "Scanned %s\n", report.Root.Path)
+	fmt.Fprintf(w, "Total: %s across %d %s, %d %s\n",
+		humanBytes(report.TotalSize),
+		report.FileCount, plural(report.FileCount, "file", "files"),
+		report.DirCount, plural(report.DirCount, "dir", "dirs"))
 
-	// Top-level children, largest first.
 	children := append([]*engine.Entry(nil), report.Root.Children...)
 	sort.Slice(children, func(i, j int) bool {
 		return children[i].Size > children[j].Size

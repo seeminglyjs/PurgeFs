@@ -15,3 +15,11 @@ func humanBytes(n int64) string {
 	}
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
+
+// plural returns one when n == 1, otherwise many.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}

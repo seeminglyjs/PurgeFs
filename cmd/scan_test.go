@@ -23,8 +23,8 @@ func TestRunScanReportsTotal(t *testing.T) {
 	if !strings.Contains(out, "3 B") {
 		t.Errorf("output missing total size %q:\n%s", "3 B", out)
 	}
-	if !strings.Contains(out, "1 file") {
-		t.Errorf("output missing file count:\n%s", out)
+	if !strings.Contains(out, "across 1 file, 1 dir") {
+		t.Errorf("output missing exact count phrase:\n%s", out)
 	}
 }
 

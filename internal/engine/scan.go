@@ -1,8 +1,18 @@
 package engine
 
+import "path/filepath"
+
 // Scan walks root and produces a Report with aggregated size and node counts.
+// The named root is resolved through filepath.EvalSymlinks first (Walk does not
+// follow symlinks, including a symlinked root, and common macOS roots such as
+// /tmp are symlinks). If resolution fails (e.g. root does not exist), the
+// original root is walked so Walk surfaces the real error.
 func Scan(root string) (*Report, []WalkError, error) {
-	rootEntry, werrs, err := Walk(root)
+	scanRoot := root
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		scanRoot = resolved
+	}
+	rootEntry, werrs, err := Walk(scanRoot)
 	if err != nil {
 		return nil, werrs, err
 	}
