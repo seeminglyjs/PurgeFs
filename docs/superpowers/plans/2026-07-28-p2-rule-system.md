@@ -1,54 +1,55 @@
-# P2 Rule System Implementation Plan
+# P2 룰 시스템 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Classify the scanned tree into junk categories (node_modules, build caches, __pycache__, .DS_Store) and show a per-category reclaimable-size summary in `scan` output.
+**목표:** 스캔한 트리를 junk 카테고리(node_modules, 빌드 캐시, __pycache__, .DS_Store)로 분류하고, `scan` 출력에 카테고리별 회수 가능 용량 요약을 보여준다.
 
-**Architecture:** A `Rule` interface plus built-in rules live in `internal/engine`. A new `Classify` pass walks the existing `Report` tree (produced unchanged by P1's `Walk`) and groups matched entries by category. A matched directory (e.g. `node_modules`) is one reclaim unit whose size is already aggregated by P1; its children are not classified further. `scan` gains a category summary section below the existing size list.
+**아키텍처:** `Rule` 인터페이스와 내장 규칙이 `internal/engine` 에 있다. 새 `Classify` 패스가 (P1 의 `Walk` 가 그대로 만든) 기존 `Report` 트리를 순회해 매치된 엔트리를 카테고리로 묶는다. 매치된 디렉토리(예: `node_modules`)는 하나의 회수 단위이며 그 크기는 P1 이 이미 집계했다. 그 하위는 더 분류하지 않는다. `scan` 은 기존 용량 리스트 아래에 카테고리 요약 섹션을 얻는다.
 
-**Tech Stack:** Go, standard library only for the engine. `cobra` already wired.
+**기술 스택:** Go, 엔진은 표준 라이브러리만. `cobra` 는 이미 연결됨.
 
-## Global Constraints
+## 전역 제약 (모든 태스크에 적용)
 
-- Go module `github.com/seeminglyjs/PurgeFs`; `go.mod` floor `go 1.24`.
-- `internal/engine` uses the standard library only — no new dependencies. Engine never imports `cmd/`.
-- **Code comments MUST be in Korean (한국어 주석)** — every `.go` source and test file, doc comments and inline alike. Keep identifiers, API names, category strings, and error strings as-is.
-- Do NOT add Claude / any AI as co-author or trailer on commits. Conventional-commit prefixes (`feat`/`test`/`docs`).
-- P2 does not delete anything. Rules target build/cache/OS junk only — never user data.
-- Do NOT modify P1's `Walk` — classification is a separate pass over the existing tree.
+- Go 모듈 `github.com/seeminglyjs/PurgeFs`; `go.mod` 하한 `go 1.24`.
+- `internal/engine` 은 표준 라이브러리만 쓴다 — 새 의존성 금지. 엔진은 `cmd/` 를 절대 import 하지 않는다.
+- **코드 주석은 반드시 한국어** — 모든 `.go` 소스·테스트 파일, 문서 주석·인라인 주석 전부. 식별자·API 이름·카테고리 문자열·에러 문자열은 그대로 둔다.
+- **문서(스펙·계획·설계)는 한국어로 작성** — 산문·제목·설명은 한국어. 코드 블록, 셸 명령, 파일 경로, 식별자, 커밋 메시지는 그대로.
+- 커밋에 Claude / 어떤 AI 도 co-author·트레일러로 넣지 않는다. Conventional-commit 접두어(`feat`/`test`/`docs`) 사용.
+- P2 는 아무것도 삭제하지 않는다. 규칙은 빌드/캐시/OS junk 만 대상 — 사용자 데이터는 절대 아님.
+- P1 의 `Walk` 는 수정 금지 — 분류는 기존 트리 위 별도 패스다.
 
-## Design Decisions (deviations from the spec's illustrative text)
+## 설계 판단 (스펙의 예시 텍스트와 다른 점)
 
-- `Rule.Match` takes `*Entry` (not `fs.DirEntry`). The spec's `fs.DirEntry` signature assumed a during-walk design; we classify **after** the walk over the `Entry` tree, so `*Entry` is the right input.
-- Built-in rules live in the `engine` package itself (not an `internal/engine/rules` subpackage) to avoid an import cycle (`Classify` needs the defaults; a subpackage would need `engine`'s `Rule`/`Entry`). Promote to a subpackage later only if the rule set grows large.
-- Matched directories are still walked for size by P1's `Walk` (prune-during-walk is a later optimization). Correctness first, like P1's sequential walk.
+- `Rule.Match` 는 `fs.DirEntry` 가 아니라 `*Entry` 를 받는다. 스펙의 `fs.DirEntry` 시그니처는 순회 중(during-walk) 설계를 가정했지만, 우리는 순회 **후**(classify-after) `Entry` 트리를 분류하므로 `*Entry` 가 맞다.
+- 내장 규칙은 `internal/engine/rules` 서브패키지가 아니라 `engine` 패키지 자체에 둔다. import 사이클 회피(`Classify` 가 기본 규칙을 필요로 하는데, 서브패키지는 `engine` 의 `Rule`/`Entry` 를 필요로 함). 규칙 집합이 커지면 나중에 서브패키지로 승격.
+- 매치된 디렉토리도 P1 의 `Walk` 가 크기를 위해 순회한다(순회 중 프루닝은 나중 최적화). P1 의 순차 순회처럼 정확성 우선.
 
-## File Structure
+## 파일 구조
 
-- Create `internal/engine/rule.go` — `Rule` interface, `dirNameRule`/`fileNameRule` implementations, `DefaultRules()`, and the shared `matchRules` helper.
-- Create `internal/engine/classify.go` — `CategoryGroup` type and `Classify(*Report, []Rule) []CategoryGroup`.
-- Create `internal/engine/rule_test.go`, `internal/engine/classify_test.go`.
-- Modify `cmd/scan.go` — append a category summary + reclaimable total to `runScan`.
-- Modify `cmd/scan_test.go` — add a test asserting the category summary appears.
+- 생성 `internal/engine/rule.go` — `Rule` 인터페이스, `dirNameRule`/`fileNameRule` 구현, `DefaultRules()`, 공용 `matchRules` 헬퍼.
+- 생성 `internal/engine/classify.go` — `CategoryGroup` 타입과 `Classify(*Report, []Rule) []CategoryGroup`.
+- 생성 `internal/engine/rule_test.go`, `internal/engine/classify_test.go`.
+- 수정 `cmd/scan.go` — `runScan` 출력에 카테고리 요약 + 회수 가능 총량 추가.
+- 수정 `cmd/scan_test.go` — 카테고리 요약이 나오는지 확인하는 테스트 추가.
 
 ---
 
-### Task 1: Rule interface + built-in rules
+### 태스크 1: Rule 인터페이스 + 내장 규칙
 
-**Files:**
-- Create: `internal/engine/rule.go`
-- Test: `internal/engine/rule_test.go`
+**파일:**
+- 생성: `internal/engine/rule.go`
+- 테스트: `internal/engine/rule_test.go`
 
-**Interfaces:**
-- Consumes: `Entry` from P1 (`internal/engine/model.go`).
-- Produces:
+**인터페이스:**
+- 소비: P1 의 `Entry` (`internal/engine/model.go`).
+- 생산:
   - `type Rule interface { Match(e *Entry) (matched bool, category string, skipChildren bool) }`
   - `func DefaultRules() []Rule`
-  - `func matchRules(rules []Rule, e *Entry) (category string, skipChildren bool, ok bool)` — tries rules in order, returns the first match.
+  - `func matchRules(rules []Rule, e *Entry) (category string, skipChildren bool, ok bool)` — 규칙을 순서대로 시도해 첫 매치를 반환.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **단계 1: 실패 테스트 작성**
 
-Create `internal/engine/rule_test.go`:
+`internal/engine/rule_test.go` 생성:
 
 ```go
 package engine
@@ -110,14 +111,14 @@ func TestDefaultRulesMatchExpected(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **단계 2: 테스트 실행해 실패 확인**
 
-Run: `export PATH="/opt/homebrew/bin:$PATH"; go test ./internal/engine/ -run 'Rule|DefaultRules' -v`
-Expected: FAIL — `undefined: dirNameRule` / `undefined: DefaultRules`.
+실행: `export PATH="/opt/homebrew/bin:$PATH"; go test ./internal/engine/ -run 'Rule|DefaultRules' -v`
+기대: FAIL — `undefined: dirNameRule` / `undefined: DefaultRules`.
 
-- [ ] **Step 3: Write the implementation**
+- [ ] **단계 3: 구현 작성**
 
-Create `internal/engine/rule.go` (comments in Korean):
+`internal/engine/rule.go` 생성 (주석 한국어):
 
 ```go
 package engine
@@ -184,12 +185,12 @@ func matchRules(rules []Rule, e *Entry) (string, bool, bool) {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **단계 4: 테스트 실행해 통과 확인**
 
-Run: `go test ./internal/engine/ -run 'Rule|DefaultRules' -v`
-Expected: PASS.
+실행: `go test ./internal/engine/ -run 'Rule|DefaultRules' -v`
+기대: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **단계 5: 커밋**
 
 ```bash
 git add internal/engine/rule.go internal/engine/rule_test.go
@@ -198,21 +199,21 @@ git commit -m "feat: add engine Rule interface and built-in junk rules"
 
 ---
 
-### Task 2: Classify tree into category groups
+### 태스크 2: 트리를 카테고리 그룹으로 분류
 
-**Files:**
-- Create: `internal/engine/classify.go`
-- Test: `internal/engine/classify_test.go`
+**파일:**
+- 생성: `internal/engine/classify.go`
+- 테스트: `internal/engine/classify_test.go`
 
-**Interfaces:**
-- Consumes: `Entry`, `Report` (P1); `Rule`, `matchRules` (Task 1).
-- Produces:
+**인터페이스:**
+- 소비: `Entry`, `Report` (P1); `Rule`, `matchRules` (태스크 1).
+- 생산:
   - `type CategoryGroup struct { Category string; Size int64; Count int; Paths []string }`
-  - `func Classify(report *Report, rules []Rule) []CategoryGroup` — groups matched entries by category, sorted by `Size` descending; a matched entry with `skipChildren` is counted once and its subtree is not classified further; returns an empty slice when nothing matches.
+  - `func Classify(report *Report, rules []Rule) []CategoryGroup` — 매치된 엔트리를 카테고리로 묶고 `Size` 내림차순 정렬. `skipChildren` 인 엔트리는 한 번만 세고 그 하위는 분류하지 않음. 매치가 없으면 빈 슬라이스 반환.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **단계 1: 실패 테스트 작성**
 
-Create `internal/engine/classify_test.go`:
+`internal/engine/classify_test.go` 생성:
 
 ```go
 package engine
@@ -254,8 +255,7 @@ func TestClassifyGroupsAndSkipsChildren(t *testing.T) {
 	if g := byCat["python-cache"]; g.Size != 200 || g.Count != 1 {
 		t.Errorf("python-cache = size %d count %d, want 200/1", g.Size, g.Count)
 	}
-	// .DS_Store inside node_modules must NOT be counted separately (subtree skipped);
-	// only the top-level one counts.
+	// node_modules 안의 .DS_Store 는 따로 세면 안 됨(하위 skip); 최상위 것만 셈.
 	if g := byCat["os-junk"]; g.Size != 6 || g.Count != 1 {
 		t.Errorf("os-junk = size %d count %d, want 6/1 (inner .DS_Store skipped)", g.Size, g.Count)
 	}
@@ -284,14 +284,14 @@ func TestClassifyEmptyWhenNoJunk(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **단계 2: 테스트 실행해 실패 확인**
 
-Run: `go test ./internal/engine/ -run TestClassify -v`
-Expected: FAIL — `undefined: Classify` / `undefined: CategoryGroup`.
+실행: `go test ./internal/engine/ -run TestClassify -v`
+기대: FAIL — `undefined: Classify` / `undefined: CategoryGroup`.
 
-- [ ] **Step 3: Write the implementation**
+- [ ] **단계 3: 구현 작성**
 
-Create `internal/engine/classify.go` (comments in Korean):
+`internal/engine/classify.go` 생성 (주석 한국어):
 
 ```go
 package engine
@@ -344,12 +344,12 @@ func classifyEntry(e *Entry, rules []Rule, groups map[string]*CategoryGroup) {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **단계 4: 테스트 실행해 통과 확인**
 
-Run: `go test ./internal/engine/ -run TestClassify -v`
-Expected: PASS.
+실행: `go test ./internal/engine/ -run TestClassify -v`
+기대: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **단계 5: 커밋**
 
 ```bash
 git add internal/engine/classify.go internal/engine/classify_test.go
@@ -358,24 +358,24 @@ git commit -m "feat: add engine Classify grouping matched entries by category"
 
 ---
 
-### Task 3: Category summary in scan output
+### 태스크 3: scan 출력에 카테고리 요약
 
-**Files:**
-- Modify: `cmd/scan.go`
-- Modify: `cmd/scan_test.go`
+**파일:**
+- 수정: `cmd/scan.go`
+- 수정: `cmd/scan_test.go`
 
-**Interfaces:**
-- Consumes: `engine.Classify`, `engine.DefaultRules`, `engine.CategoryGroup` (Task 1–2); `humanBytes`, `plural` (P1).
-- Produces: no new exported symbol — extends `runScan`'s output with a reclaimable-category summary printed after the existing size list. When no category matches, nothing extra is printed.
+**인터페이스:**
+- 소비: `engine.Classify`, `engine.DefaultRules`, `engine.CategoryGroup` (태스크 1~2); `humanBytes`, `plural` (P1).
+- 생산: 새 export 심볼 없음 — 기존 용량 리스트 뒤에 회수 가능 카테고리 요약을 출력하도록 `runScan` 을 확장. 매치가 없으면 아무것도 추가 출력하지 않음.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **단계 1: 실패 테스트 작성**
 
-Add to `cmd/scan_test.go` (uses `os`/`path/filepath`/`bytes`/`strings`, already imported there):
+`cmd/scan_test.go` 에 추가 (`os`/`path/filepath`/`bytes`/`strings` 는 이미 import 됨):
 
 ```go
 func TestRunScanShowsCategorySummary(t *testing.T) {
 	root := t.TempDir()
-	// node_modules with a file inside
+	// 안에 파일이 있는 node_modules
 	nm := filepath.Join(root, "node_modules")
 	if err := os.MkdirAll(nm, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -383,7 +383,7 @@ func TestRunScanShowsCategorySummary(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(nm, "big.bin"), make([]byte, 2048), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	// a stray .DS_Store at the root
+	// 루트에 떠도는 .DS_Store
 	if err := os.WriteFile(filepath.Join(root, ".DS_Store"), []byte("x"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -405,14 +405,14 @@ func TestRunScanShowsCategorySummary(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **단계 2: 테스트 실행해 실패 확인**
 
-Run: `go test ./cmd/ -run TestRunScanShowsCategorySummary -v`
-Expected: FAIL — no "Reclaimable" text in output.
+실행: `go test ./cmd/ -run TestRunScanShowsCategorySummary -v`
+기대: FAIL — 출력에 "Reclaimable" 없음.
 
-- [ ] **Step 3: Extend runScan**
+- [ ] **단계 3: runScan 확장**
 
-In `cmd/scan.go`, add the category summary after the existing children loop and before the `werrs` block. Insert this block (comments in Korean):
+`cmd/scan.go` 에서 기존 자식 루프 뒤, `werrs` 블록 앞에 카테고리 요약을 추가한다. 이 블록을 삽입 (주석 한국어):
 
 ```go
 	// junk 카테고리로 분류해 회수 가능 용량을 요약한다. 매치가 없으면 아무 것도 안 찍는다.
@@ -431,23 +431,23 @@ In `cmd/scan.go`, add the category summary after the existing children loop and 
 	}
 ```
 
-For reference, the resulting `runScan` order is: header → total → sorted child list → **category summary (new)** → skipped-errors note.
+참고 — 최종 `runScan` 출력 순서: 헤더 → 총량 → 정렬된 자식 리스트 → **카테고리 요약(신규)** → skip 에러 안내.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **단계 4: 테스트 실행해 통과 확인**
 
-Run: `go test ./cmd/ -run TestRunScanShowsCategorySummary -v`
-Expected: PASS.
+실행: `go test ./cmd/ -run TestRunScanShowsCategorySummary -v`
+기대: PASS.
 
-- [ ] **Step 5: Full build + test + manual smoke**
+- [ ] **단계 5: 전체 빌드 + 테스트 + 수동 확인**
 
-Run:
+실행:
 ```bash
 go build -o purgefs . && go vet ./... && go test ./... && ./purgefs scan .
 rm -f purgefs
 ```
-Expected: build OK; vet clean; all tests PASS; `scan .` prints the total, child list, and (if this repo has any) a Reclaimable category summary.
+기대: 빌드 OK; vet 클린; 전체 테스트 PASS; `scan .` 이 총량·자식 리스트·(이 repo 에 junk 가 있으면) 회수 가능 카테고리 요약을 출력.
 
-- [ ] **Step 6: Commit**
+- [ ] **단계 6: 커밋**
 
 ```bash
 git add cmd/scan.go cmd/scan_test.go
@@ -456,21 +456,21 @@ git commit -m "feat: show reclaimable category summary in scan output"
 
 ---
 
-## Self-Review
+## 자체 검토
 
-**1. Spec coverage (P2 scope):**
-- Rule interface + registry → Task 1 (`Rule`, `DefaultRules`, `matchRules`). ✓
-- Built-in rules (node_modules, target, build, .gradle, __pycache__, dist, .DS_Store) → Task 1 `DefaultRules`. ✓
-- Category grouping → Task 2 `Classify` / `CategoryGroup`. ✓
-- Reclaim preview → Task 3 (reclaimable total + per-category sizes). ✓
-- Out of P2 scope by design: trash/purge (P3), TUI (P4), undo/preset (P5), staleness scoring, config-file rules.
+**1. 스펙 커버리지 (P2 범위):**
+- Rule 인터페이스 + 레지스트리 → 태스크 1 (`Rule`, `DefaultRules`, `matchRules`). ✓
+- 내장 규칙(node_modules, target, build, .gradle, __pycache__, dist, .DS_Store) → 태스크 1 `DefaultRules`. ✓
+- 카테고리 그룹 → 태스크 2 `Classify` / `CategoryGroup`. ✓
+- 회수량 미리보기 → 태스크 3 (회수 가능 총량 + 카테고리별 용량). ✓
+- 설계상 P2 범위 밖: trash/purge(P3), TUI(P4), undo/preset(P5), staleness 스코어링, config 파일 규칙.
 
-**2. Placeholder scan:** No TBD/TODO/"handle edge cases" — every code and test step is complete. ✓
+**2. Placeholder 스캔:** TBD/TODO/"엣지케이스 처리" 없음 — 모든 코드·테스트 단계가 완결. ✓
 
-**3. Type consistency:** `Rule.Match(e *Entry) (bool, string, bool)`, `matchRules(rules, e) (string, bool, bool)`, `Classify(*Report, []Rule) []CategoryGroup`, `CategoryGroup{Category, Size, Count, Paths}` are used identically across Tasks 1–3 and the tests. Category strings (`node_modules`, `build-cache`, `python-cache`, `os-junk`) match between `DefaultRules` and the classify/scan tests. ✓
+**3. 타입 일관성:** `Rule.Match(e *Entry) (bool, string, bool)`, `matchRules(rules, e) (string, bool, bool)`, `Classify(*Report, []Rule) []CategoryGroup`, `CategoryGroup{Category, Size, Count, Paths}` 가 태스크 1~3 과 테스트에서 동일하게 쓰임. 카테고리 문자열(`node_modules`, `build-cache`, `python-cache`, `os-junk`)이 `DefaultRules` 와 classify/scan 테스트 사이에서 일치. ✓
 
-## Notes
+## 참고
 
-- Korean comments are mandatory (see Global Constraints); the code blocks above already follow this — implementers should preserve them verbatim.
-- `Classify` starts at `report.Root`, so scanning a junk directory directly (e.g. `purgefs scan ./node_modules`) will classify the root itself as one group. That is correct and harmless.
-- Perf: matched directories are walked for size by P1's `Walk`. Prune-during-walk is a deliberate later optimization, not part of P2.
+- 주석 한국어는 필수(전역 제약 참고). 위 코드 블록은 이미 이를 따르므로 구현자는 그대로 보존할 것.
+- `Classify` 는 `report.Root` 부터 시작하므로, junk 디렉토리를 직접 스캔하면(예: `purgefs scan ./node_modules`) 루트 자체가 한 그룹으로 분류된다. 정확하고 무해함.
+- 성능: 매치된 디렉토리도 P1 의 `Walk` 가 크기를 위해 순회한다. 순회 중 프루닝은 의도된 나중 최적화이며 P2 범위 아님.

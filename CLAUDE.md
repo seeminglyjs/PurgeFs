@@ -67,6 +67,7 @@ Fast terminal disk cleaner for macOS/Linux. CLI (no GUI). Scan a path, purge jun
 - Purge rules target build/cache junk: `target/`, `node_modules/`, `__pycache__/`, `.DS_Store`, logs, temp — never user data by default.
 - New subcommand = new file under `cmd/`, register via `init()` + `rootCmd.AddCommand`.
 - **Code comments MUST be written in Korean** (한국어 주석). Applies to all `.go` source and test files — doc comments, inline comments, everything. Keep identifiers, API names, and error strings as-is.
+- **Project docs MUST be written in Korean** — specs, plans, design docs under `docs/`. Prose, headings, and explanations in Korean; keep code blocks, shell commands, file paths, identifiers, and commit messages as-is.
 
 ## Git
 
