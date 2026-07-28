@@ -1,7 +1,10 @@
-# Rust
-/target
-**/*.rs.bk
-Cargo.lock.orig
+# Go
+/purgefs
+/bin/
+/dist/
+*.test
+*.out
+coverage.*
 
 # macOS
 .DS_Store

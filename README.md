@@ -10,14 +10,20 @@ Early scaffold. `scan` / `purge` commands are stubbed — not implemented yet.
 
 ## Build
 
-Requires the Rust toolchain (`rustc` + `cargo`).
+Requires Go (1.24+).
 
 ```bash
-# install Rust if missing
-brew install rust        # or: curl https://sh.rustup.rs -sSf | sh
+# install Go if missing
+brew install go
 
-cargo build --release
-./target/release/purgefs --help
+go build -o purgefs .
+./purgefs --help
+```
+
+Or run without building:
+
+```bash
+go run . scan ~/Downloads
 ```
 
 ## Usage
@@ -27,9 +33,19 @@ purgefs scan [PATH]            # report junk under PATH (default: .), no deletio
 purgefs purge [PATH] [--yes]   # delete junk under PATH, asks first unless --yes
 ```
 
+## Layout
+
+```
+main.go        entry point
+cmd/           cobra command tree
+  root.go      root command + version + Execute()
+  scan.go      scan subcommand
+  purge.go     purge subcommand
+```
+
 ## Roadmap
 
-- [ ] Filesystem walk with size aggregation
+- [ ] Filesystem walk with size aggregation (`filepath.WalkDir`)
 - [ ] Junk rules (build caches, node_modules, __pycache__, .DS_Store, logs, temp)
 - [ ] Interactive TUI selection
 - [ ] Dry-run + confirmation before delete
