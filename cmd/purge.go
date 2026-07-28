@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/seeminglyjs/PurgeFs/internal/engine"
+	"github.com/seeminglyjs/PurgeFs/internal/history"
 	"github.com/seeminglyjs/PurgeFs/internal/trash"
 	"github.com/seeminglyjs/PurgeFs/internal/tui"
 	"github.com/spf13/cobra"
@@ -91,6 +93,11 @@ func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, as
 	}
 
 	res := tr.Trash(paths)
+	if dir, err := historyDir(); err == nil {
+		if herr := recordHistory(dir, res, time.Now().Unix()); herr != nil {
+			fmt.Fprintf(w, "  (기록 실패: %v)\n", herr)
+		}
+	}
 	return reportTrashResult(w, res)
 }
 
@@ -147,7 +154,13 @@ func runPurgeInteractive(w io.Writer, path string, tr trash.Trasher) error {
 		fmt.Fprintln(w, "선택한 항목이 없습니다.")
 		return nil
 	}
-	return reportTrashResult(w, tr.Trash(paths))
+	res := tr.Trash(paths)
+	if dir, err := historyDir(); err == nil {
+		if herr := recordHistory(dir, res, time.Now().Unix()); herr != nil {
+			fmt.Fprintf(w, "  (기록 실패: %v)\n", herr)
+		}
+	}
+	return reportTrashResult(w, res)
 }
 
 // confirmed 는 in 에서 한 줄 읽어 y/yes(대소문자 무시)면 true.
@@ -185,6 +198,34 @@ func guardRoot(path string) error {
 		}
 	}
 	return nil
+}
+
+// historyDir 은 매니페스트를 저장하는 ~/.purgefs/history 경로를 반환한다.
+func historyDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".purgefs", "history"), nil
+}
+
+// movedToItems 는 휴지통 이동 매핑을 매니페스트 항목으로 바꾼다.
+func movedToItems(moved []trash.Moved) []history.Item {
+	items := make([]history.Item, 0, len(moved))
+	for _, mv := range moved {
+		items = append(items, history.Item{Original: mv.Original, Dest: mv.Dest})
+	}
+	return items
+}
+
+// recordHistory 는 휴지통 이동이 있으면 매니페스트를 저장한다. 완전 삭제(Moved 비어 있음)는
+// 되돌릴 수 없으므로 아무것도 남기지 않는다.
+func recordHistory(dir string, res trash.Result, createdAt int64) error {
+	if len(res.Moved) == 0 {
+		return nil
+	}
+	_, err := history.Save(dir, history.Manifest{CreatedAt: createdAt, Items: movedToItems(res.Moved)})
+	return err
 }
 
 func init() {
