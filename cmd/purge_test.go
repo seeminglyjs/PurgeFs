@@ -102,3 +102,21 @@ func TestRunPurgeNoJunk(t *testing.T) {
 		t.Errorf("clean dir should trash nothing: %v", f.got)
 	}
 }
+
+func TestGuardRootRefusesDangerous(t *testing.T) {
+	if err := guardRoot("/"); err == nil {
+		t.Error("guardRoot(/) must return an error")
+	}
+	home, err := os.UserHomeDir()
+	if err == nil {
+		if err := guardRoot(home); err == nil {
+			t.Errorf("guardRoot(home=%q) must return an error", home)
+		}
+	}
+}
+
+func TestGuardRootAllowsSubdir(t *testing.T) {
+	if err := guardRoot(t.TempDir()); err != nil {
+		t.Errorf("guardRoot(tempdir) should be allowed: %v", err)
+	}
+}

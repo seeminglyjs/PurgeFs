@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/seeminglyjs/PurgeFs/internal/engine"
@@ -11,12 +13,35 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	purgeYes  bool
+	purgeHard bool
+)
+
 var purgeCmd = &cobra.Command{
 	Use:   "purge [path]",
 	Short: "Purge junk under a path (asks before deleting)",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return fmt.Errorf("purge wiring lands in P3 Task 3")
+		path := "."
+		if len(args) == 1 {
+			path = args[0]
+		}
+		if err := guardRoot(path); err != nil {
+			return err
+		}
+
+		var tr trash.Trasher
+		if purgeHard {
+			tr = trash.NewHardDeleter()
+		} else {
+			t, err := trash.NewMacTrasher()
+			if err != nil {
+				return err
+			}
+			tr = t
+		}
+		return runPurge(cmd.OutOrStdout(), cmd.InOrStdin(), path, tr, purgeHard, purgeYes)
 	},
 }
 
@@ -78,6 +103,25 @@ func confirmed(in io.Reader) bool {
 	return ans == "y" || ans == "yes"
 }
 
+// guardRoot 는 위험한 루트를 거부한다: 파일시스템 루트(/)와 홈 디렉토리. 사용자가 실수로
+// 거대한 영역을 통째로 정리하는 것을 막는다.
+func guardRoot(path string) error {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	abs = filepath.Clean(abs)
+	if abs == string(filepath.Separator) {
+		return fmt.Errorf("refusing to purge filesystem root %q", abs)
+	}
+	if home, err := os.UserHomeDir(); err == nil && abs == filepath.Clean(home) {
+		return fmt.Errorf("refusing to purge home directory %q", abs)
+	}
+	return nil
+}
+
 func init() {
+	purgeCmd.Flags().BoolVar(&purgeYes, "yes", false, "확인 없이 진행")
+	purgeCmd.Flags().BoolVar(&purgeHard, "hard", false, "휴지통이 아니라 완전 삭제")
 	rootCmd.AddCommand(purgeCmd)
 }
