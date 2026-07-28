@@ -105,6 +105,24 @@ func TestRunPurgeNoJunk(t *testing.T) {
 	}
 }
 
+func TestRunPurgeAbsolutizesRelativeRoot(t *testing.T) {
+	root := junkDir(t)
+	t.Chdir(root)
+	f := &fakeTrasher{}
+	var buf bytes.Buffer
+	if err := runPurge(&buf, strings.NewReader("y\n"), ".", f, false, false, engine.DefaultRules()); err != nil {
+		t.Fatalf("runPurge: %v", err)
+	}
+	if len(f.got) == 0 {
+		t.Fatal("nothing was sent to the trasher")
+	}
+	for _, p := range f.got {
+		if !filepath.IsAbs(p) {
+			t.Errorf("trasher got non-absolute path %q; undo would restore to the wrong cwd", p)
+		}
+	}
+}
+
 func TestGuardRootRefusesDangerous(t *testing.T) {
 	if err := guardRoot("/"); err == nil {
 		t.Error("guardRoot(/) must return an error")

@@ -69,6 +69,29 @@ func TestRestoreMovesBackAndSkips(t *testing.T) {
 	}
 }
 
+// 원본 자리에 이미 파일이 있고 Dest 도 있으면, 덮어쓰지 않고 건너뛰며 둘 다 보존한다.
+func TestRestoreDoesNotOverwriteExistingOriginal(t *testing.T) {
+	base := t.TempDir()
+	original := filepath.Join(base, "keep")
+	if err := os.WriteFile(original, []byte("current"), 0o644); err != nil {
+		t.Fatalf("seed original: %v", err)
+	}
+	dest := filepath.Join(base, "trash-keep")
+	if err := os.WriteFile(dest, []byte("old"), 0o644); err != nil {
+		t.Fatalf("seed dest: %v", err)
+	}
+	res := Restore(Manifest{Items: []Item{{Original: original, Dest: dest}}})
+	if len(res.Restored) != 0 || len(res.Skipped) != 1 {
+		t.Fatalf("res = %+v, want 0 restored 1 skipped", res)
+	}
+	if data, _ := os.ReadFile(original); string(data) != "current" {
+		t.Errorf("original overwritten: %q, want \"current\"", data)
+	}
+	if _, err := os.Lstat(dest); err != nil {
+		t.Errorf("dest should be untouched: %v", err)
+	}
+}
+
 // 원본은 비어 있지만 Dest(휴지통 파일)가 없으면 건너뛴다(두 번째 skip 분기 단독 검증).
 func TestRestoreSkipsWhenDestMissing(t *testing.T) {
 	base := t.TempDir()

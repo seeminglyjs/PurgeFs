@@ -17,7 +17,7 @@ type Item struct {
 
 // Manifest 는 한 번의 휴지통 purge 기록이다.
 type Manifest struct {
-	CreatedAt int64  `json:"created_at"` // unix 초
+	CreatedAt int64  `json:"created_at"` // 정렬·파일명용 타임스탬프(unix 나노초)
 	Items     []Item `json:"items"`
 }
 

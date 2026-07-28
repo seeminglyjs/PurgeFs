@@ -66,6 +66,11 @@ var purgeCmd = &cobra.Command{
 // 받은 뒤 tr 로 처리한다. hard 는 확인 문구를 완전 삭제용으로 바꾸는 데만 쓴다. junk 가
 // 없으면 아무것도 삭제하지 않는다.
 func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, assumeYes bool, rules []engine.Rule) error {
+	// 상대 경로면 절대 경로로 바꾼다. 그래야 매니페스트에 기록되는 원본 경로가 절대 경로가
+	// 되어 undo 를 다른 디렉토리에서 실행해도 올바른 위치로 복원된다.
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
 	report, _, err := engine.Scan(path)
 	if err != nil {
 		return err
@@ -103,7 +108,7 @@ func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, as
 
 	res := tr.Trash(paths)
 	if dir, err := historyDir(); err == nil {
-		if herr := recordHistory(dir, res, time.Now().Unix()); herr != nil {
+		if herr := recordHistory(dir, res, time.Now().UnixNano()); herr != nil {
 			fmt.Fprintf(w, "  (기록 실패: %v)\n", herr)
 		}
 	}
@@ -139,6 +144,11 @@ func groupsToItems(groups []engine.CategoryGroup) []tui.Item {
 // runPurgeInteractive 는 분류 결과를 TUI 로 띄워 사용자가 고른 항목만 tr 로 처리한다. tty 가
 // 필요한 tea.Program 실행이라 단위 테스트하지 않는다(선택 로직은 internal/tui 에서 테스트).
 func runPurgeInteractive(w io.Writer, path string, tr trash.Trasher, rules []engine.Rule) error {
+	// 상대 경로면 절대 경로로 바꾼다. 그래야 매니페스트에 기록되는 원본 경로가 절대 경로가
+	// 되어 undo 를 다른 디렉토리에서 실행해도 올바른 위치로 복원된다.
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
 	report, _, err := engine.Scan(path)
 	if err != nil {
 		return err
@@ -165,7 +175,7 @@ func runPurgeInteractive(w io.Writer, path string, tr trash.Trasher, rules []eng
 	}
 	res := tr.Trash(paths)
 	if dir, err := historyDir(); err == nil {
-		if herr := recordHistory(dir, res, time.Now().Unix()); herr != nil {
+		if herr := recordHistory(dir, res, time.Now().UnixNano()); herr != nil {
 			fmt.Fprintf(w, "  (기록 실패: %v)\n", herr)
 		}
 	}
