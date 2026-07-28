@@ -14,9 +14,16 @@ type Failure struct {
 	Err  error
 }
 
+// Moved 는 휴지통으로 옮긴 항목의 원본→목적지 매핑이다(undo 용). 완전 삭제는 이 정보가 없다.
+type Moved struct {
+	Original string
+	Dest     string
+}
+
 // Result 는 한 번의 정리 작업 결과다. 경로별 실패는 Failed 에 모이고 나머지는 계속 처리된다.
 type Result struct {
-	Trashed []string
+	Trashed []string // 처리된 원본 경로(개수·요약용)
+	Moved   []Moved  // 휴지통 이동 매핑(undo 용). 완전 삭제 시 비어 있음.
 	Failed  []Failure
 }
 
@@ -54,6 +61,7 @@ func (m *macTrasher) Trash(paths []string) Result {
 			continue
 		}
 		r.Trashed = append(r.Trashed, p)
+		r.Moved = append(r.Moved, Moved{Original: p, Dest: dest})
 	}
 	return r
 }
