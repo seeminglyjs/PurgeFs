@@ -41,7 +41,7 @@ var purgeCmd = &cobra.Command{
 		if purgeHard {
 			tr = trash.NewHardDeleter()
 		} else {
-			t, err := trash.NewMacTrasher()
+			t, err := trash.NewTrasher()
 			if err != nil {
 				return err
 			}
@@ -254,7 +254,7 @@ func historyDir() (string, error) {
 func movedToItems(moved []trash.Moved) []history.Item {
 	items := make([]history.Item, 0, len(moved))
 	for _, mv := range moved {
-		items = append(items, history.Item{Original: mv.Original, Dest: mv.Dest})
+		items = append(items, history.Item{Original: mv.Original, Dest: mv.Dest, Sidecar: mv.Sidecar})
 	}
 	return items
 }

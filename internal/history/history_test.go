@@ -170,6 +170,28 @@ func TestRestoreRecreatesMissingParent(t *testing.T) {
 	}
 }
 
+// 복원하면 XDG 휴지통의 .trashinfo 사이드카도 함께 치운다. 짝 없는 info 파일이 남으면 안 된다.
+func TestRestoreRemovesSidecar(t *testing.T) {
+	base := t.TempDir()
+	dest := filepath.Join(base, "trash-nm")
+	if err := os.WriteFile(dest, []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed dest: %v", err)
+	}
+	sidecar := filepath.Join(base, "trash-nm.trashinfo")
+	if err := os.WriteFile(sidecar, []byte("[Trash Info]\n"), 0o644); err != nil {
+		t.Fatalf("seed sidecar: %v", err)
+	}
+	original := filepath.Join(base, "nm")
+
+	res := Restore(Manifest{Items: []Item{{Original: original, Dest: dest, Sidecar: sidecar}}})
+	if len(res.Restored) != 1 {
+		t.Fatalf("res = %+v, want 1 restored", res)
+	}
+	if _, err := os.Lstat(sidecar); !os.IsNotExist(err) {
+		t.Errorf("sidecar still present after restore: %v", err)
+	}
+}
+
 // 원본은 비어 있지만 Dest(휴지통 파일)가 없으면 건너뛴다(두 번째 skip 분기 단독 검증).
 func TestRestoreSkipsWhenDestMissing(t *testing.T) {
 	base := t.TempDir()
