@@ -2,7 +2,7 @@
 
 macOS·Linux용 빠른 터미널 디스크 클리너. 경로를 스캔해 용량을 잡아먹는 junk를 찾고, 안전하게 정리한다. GUI 없음, 유료 없음.
 
-[tw93/mole](https://github.com/tw93/mole)에서 영감을 받아 집중된 CLI로 다듬었다. 삭제는 기본적으로 **휴지통행**(복구 가능)이며, 완전 삭제는 `--hard`로만.
+삭제는 기본적으로 **휴지통행**(복구 가능)이며, 완전 삭제는 `--hard`로만.
 
 ## 진행 상황
 
@@ -119,7 +119,9 @@ purgefs purge ~/project -i                 # 대화형 TUI로 선택
 purgefs purge ~/project --preset dev-caches # node_modules·빌드 캐시만 (.DS_Store 제외)
 ```
 
-위험 루트(`/`, 홈 디렉토리)는 거부한다. `/`나 홈을 가리키는 심볼릭링크도 막는다.
+위험 루트는 거부한다: `/`, 홈 디렉토리와 그 조상(`/Users` 등), 시스템 디렉토리(`/usr`, `/etc`, `/var` 등). 이들을 가리키는 심볼릭링크도 막는다.
+
+`build/`·`dist/`·`target/`은 이름만으로 빌드 산출물인지 알 수 없으므로, 같은 위치에 프로젝트 마커가 있을 때만 대상이 된다 — `target/`은 `Cargo.toml`·`pom.xml`, `dist/`는 `package.json`, `build/`는 `build.gradle`·`pom.xml`·`CMakeLists.txt`. `node_modules/`·`__pycache__/`·`.gradle/`·`.DS_Store`는 이름만으로 명확해 마커가 필요 없다.
 
 ### `undo` — 되돌리기
 
@@ -130,6 +132,8 @@ purgefs undo   # 마지막 휴지통 정리를 복원
 ```
 
 원래 자리에 이미 뭔가 있으면 덮어쓰지 않고 건너뛴다. `--hard`(완전 삭제)는 기록이 없어 되돌릴 수 없다.
+
+되돌린 매니페스트는 소비되므로, `undo`를 다시 실행하면 그 이전 purge로 넘어간다. 복원에 실패한 항목이 있으면 매니페스트를 남겨 원인을 고친 뒤 다시 시도할 수 있다.
 
 `-i` 대화형 화면:
 
