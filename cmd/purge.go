@@ -90,6 +90,13 @@ func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, as
 		fmt.Fprintf(w, ", 실패 %d개", len(res.Failed))
 	}
 	fmt.Fprintln(w)
+	if len(res.Failed) > 0 {
+		// 첫 실패 이유를 보여주고, 하나도 처리 못 했으면 에러로 종료해 스크립트가 감지하게 한다.
+		fmt.Fprintf(w, "  첫 실패: %s: %v\n", res.Failed[0].Path, res.Failed[0].Err)
+		if len(res.Trashed) == 0 {
+			return fmt.Errorf("purge failed: %d개 항목 모두 실패", len(res.Failed))
+		}
+	}
 	return nil
 }
 
@@ -104,18 +111,28 @@ func confirmed(in io.Reader) bool {
 }
 
 // guardRoot 는 위험한 루트를 거부한다: 파일시스템 루트(/)와 홈 디렉토리. 사용자가 실수로
-// 거대한 영역을 통째로 정리하는 것을 막는다.
+// 거대한 영역을 통째로 정리하는 것을 막는다. engine.Scan 이 root 를 EvalSymlinks 로
+// resolve 하므로, 가드도 같은 resolve 를 거쳐 실제로 순회될 경로를 검사한다(심볼릭링크로
+// 가드를 우회하는 것을 막는다).
 func guardRoot(path string) error {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return err
 	}
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
 	abs = filepath.Clean(abs)
 	if abs == string(filepath.Separator) {
 		return fmt.Errorf("refusing to purge filesystem root %q", abs)
 	}
-	if home, err := os.UserHomeDir(); err == nil && abs == filepath.Clean(home) {
-		return fmt.Errorf("refusing to purge home directory %q", abs)
+	if home, err := os.UserHomeDir(); err == nil {
+		if resolved, err := filepath.EvalSymlinks(home); err == nil {
+			home = resolved
+		}
+		if abs == filepath.Clean(home) {
+			return fmt.Errorf("refusing to purge home directory %q", abs)
+		}
 	}
 	return nil
 }

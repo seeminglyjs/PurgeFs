@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -118,5 +119,42 @@ func TestGuardRootRefusesDangerous(t *testing.T) {
 func TestGuardRootAllowsSubdir(t *testing.T) {
 	if err := guardRoot(t.TempDir()); err != nil {
 		t.Errorf("guardRoot(tempdir) should be allowed: %v", err)
+	}
+}
+
+func TestGuardRootRefusesSymlinkToHome(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home dir")
+	}
+	link := filepath.Join(t.TempDir(), "link-to-home")
+	if err := os.Symlink(home, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	if err := guardRoot(link); err == nil {
+		t.Error("guardRoot must refuse a symlink that resolves to the home directory")
+	}
+}
+
+// failTrasher 는 모든 경로를 실패로 처리한다.
+type failTrasher struct{}
+
+func (failTrasher) Trash(paths []string) trash.Result {
+	var f []trash.Failure
+	for _, p := range paths {
+		f = append(f, trash.Failure{Path: p, Err: errors.New("boom")})
+	}
+	return trash.Result{Failed: f}
+}
+
+func TestRunPurgeAllFailedReturnsError(t *testing.T) {
+	root := junkDir(t)
+	var buf bytes.Buffer
+	err := runPurge(&buf, strings.NewReader(""), root, failTrasher{}, false, true)
+	if err == nil {
+		t.Error("expected a non-nil error when every target fails")
+	}
+	if !strings.Contains(buf.String(), "실패") {
+		t.Errorf("output missing failure notice:\n%s", buf.String())
 	}
 }
