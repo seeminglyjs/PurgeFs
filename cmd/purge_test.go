@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/seeminglyjs/PurgeFs/internal/engine"
 	"github.com/seeminglyjs/PurgeFs/internal/trash"
 )
 
@@ -156,5 +157,22 @@ func TestRunPurgeAllFailedReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "실패") {
 		t.Errorf("output missing failure notice:\n%s", buf.String())
+	}
+}
+
+func TestGroupsToItems(t *testing.T) {
+	groups := []engine.CategoryGroup{
+		{Category: "node_modules", Size: 1000, Count: 1, Paths: []string{"/p/node_modules"}},
+		{Category: "os-junk", Size: 6, Count: 2, Paths: []string{"/p/.DS_Store", "/p/x/.DS_Store"}},
+	}
+	items := groupsToItems(groups)
+	if len(items) != 2 {
+		t.Fatalf("items = %d, want 2", len(items))
+	}
+	if items[0].Label != "node_modules" || items[0].Size != 1000 || len(items[0].Paths) != 1 {
+		t.Errorf("item[0] = %+v", items[0])
+	}
+	if items[1].Label != "os-junk" || len(items[1].Paths) != 2 {
+		t.Errorf("item[1] = %+v", items[1])
 	}
 }
