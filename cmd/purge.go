@@ -71,13 +71,14 @@ func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, as
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
-	report, _, err := engine.Scan(path)
+	report, werrs, err := engine.Scan(path)
 	if err != nil {
 		return err
 	}
 	groups := engine.Classify(report, rules)
 	if len(groups) == 0 {
 		fmt.Fprintln(w, "정리할 junk가 없습니다.")
+		reportWalkErrors(w, werrs)
 		return nil
 	}
 
@@ -97,6 +98,7 @@ func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, as
 		fmt.Fprintf(w, "  %10s  %-14s (%d %s)\n",
 			humanBytes(g.Size), g.Category, g.Count, plural(g.Count, "item", "items"))
 	}
+	reportWalkErrors(w, werrs)
 
 	if !assumeYes {
 		fmt.Fprint(w, "진행할까요? [y/N] ")
@@ -107,6 +109,15 @@ func runPurge(w io.Writer, in io.Reader, path string, tr trash.Trasher, hard, as
 	}
 
 	return reportTrashResult(w, purgePaths(w, tr, paths))
+}
+
+// reportWalkErrors 는 순회 중 못 읽은 경로가 있었음을 알린다. 조용히 넘기면 사용자는 권한
+// 때문에 빠진 부분까지 다 정리된 줄 안다.
+func reportWalkErrors(w io.Writer, werrs []engine.WalkError) {
+	if len(werrs) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "읽지 못해 건너뛴 경로 %d개 — 실제 정리 대상은 더 많을 수 있습니다\n", len(werrs))
 }
 
 // reportTrashResult 는 처리·실패 개수를 출력한다. 실패가 있으면 첫 이유를 보여주고, 하나도
@@ -143,15 +154,17 @@ func runPurgeInteractive(w io.Writer, path string, tr trash.Trasher, rules []eng
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
-	report, _, err := engine.Scan(path)
+	report, werrs, err := engine.Scan(path)
 	if err != nil {
 		return err
 	}
 	groups := engine.Classify(report, rules)
 	if len(groups) == 0 {
 		fmt.Fprintln(w, "정리할 junk가 없습니다.")
+		reportWalkErrors(w, werrs)
 		return nil
 	}
+	reportWalkErrors(w, werrs)
 
 	final, err := tea.NewProgram(tui.New(groupsToItems(groups), humanBytes)).Run()
 	if err != nil {

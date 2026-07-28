@@ -152,6 +152,24 @@ func TestRestoreDoesNotOverwriteExistingOriginal(t *testing.T) {
 	}
 }
 
+// purge 이후 원본의 부모 디렉토리가 사라졌더라도 복원할 수 있어야 한다.
+func TestRestoreRecreatesMissingParent(t *testing.T) {
+	base := t.TempDir()
+	dest := filepath.Join(base, "trash-nm")
+	if err := os.WriteFile(dest, []byte("x"), 0o644); err != nil {
+		t.Fatalf("seed dest: %v", err)
+	}
+	original := filepath.Join(base, "gone", "deeper", "nm")
+
+	res := Restore(Manifest{Items: []Item{{Original: original, Dest: dest}}})
+	if len(res.Restored) != 1 || len(res.Failed) != 0 {
+		t.Fatalf("res = %+v, want 1 restored 0 failed", res)
+	}
+	if data, err := os.ReadFile(original); err != nil || string(data) != "x" {
+		t.Errorf("original = (%q, %v), want restored content \"x\"", data, err)
+	}
+}
+
 // 원본은 비어 있지만 Dest(휴지통 파일)가 없으면 건너뛴다(두 번째 skip 분기 단독 검증).
 func TestRestoreSkipsWhenDestMissing(t *testing.T) {
 	base := t.TempDir()

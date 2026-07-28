@@ -156,6 +156,30 @@ func TestGuardRootRefusesSymlinkToHome(t *testing.T) {
 	}
 }
 
+// 권한 때문에 못 읽은 디렉토리가 있으면 알려야 한다. 조용히 넘기면 사용자는 다 정리된 줄 안다.
+func TestRunPurgeReportsSkippedPaths(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can read a 0000 directory")
+	}
+	root := junkDir(t)
+	blocked := filepath.Join(root, "blocked")
+	if err := os.Mkdir(blocked, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Chmod(blocked, 0o000); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(blocked, 0o755) }) // TempDir 정리가 가능하도록 되돌린다
+
+	var buf bytes.Buffer
+	if err := runPurge(&buf, strings.NewReader(""), root, &fakeTrasher{}, false, true, engine.DefaultRules()); err != nil {
+		t.Fatalf("runPurge: %v", err)
+	}
+	if !strings.Contains(buf.String(), "건너뛴") {
+		t.Errorf("output must report unreadable paths:\n%s", buf.String())
+	}
+}
+
 // 홈의 조상(예: /Users)을 지정하면 홈 전체가 대상이 되므로 거부해야 한다.
 func TestGuardRootRefusesHomeAncestor(t *testing.T) {
 	home, err := os.UserHomeDir()

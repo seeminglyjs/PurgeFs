@@ -105,14 +105,22 @@ func TestRunUndoTwiceReachesPreviousPurge(t *testing.T) {
 
 // 복원에 실패한 항목이 있으면 매니페스트를 소비하지 않아, 원인을 고친 뒤 다시 시도할 수 있다.
 func TestRunUndoKeepsManifestWhenRestoreFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write into a read-only directory")
+	}
 	base := t.TempDir()
 	histDir := filepath.Join(base, "history")
 	dest := filepath.Join(base, "trash-nm")
 	if err := os.WriteFile(dest, []byte("x"), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	// 원본의 부모 디렉토리가 없어 rename 이 실패한다.
-	original := filepath.Join(base, "gone-parent", "nm")
+	// 원본의 부모가 쓰기 불가라 rename 이 실패한다.
+	parent := filepath.Join(base, "readonly")
+	if err := os.Mkdir(parent, 0o500); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(parent, 0o755) }) // TempDir 정리가 가능하도록 되돌린다
+	original := filepath.Join(parent, "nm")
 	if _, err := history.Save(histDir, history.Manifest{
 		CreatedAt: 5, Items: []history.Item{{Original: original, Dest: dest}},
 	}); err != nil {
